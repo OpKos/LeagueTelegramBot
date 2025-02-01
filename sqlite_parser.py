@@ -49,7 +49,7 @@ class SqliteParser:
             logger.error("Error in get_telegram_name_by_pid: %s", str(e))
             return None
 
-    def get_player_games_grouped_by_table(self, p_id: int):
+    def get_player_games_grouped_by_table(self, p_id: int, stage: int):
         """Возвращает информацию об играх, сгруппированных по столам, с именами игроков из Telegram и их настоящими именами."""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -57,9 +57,9 @@ class SqliteParser:
                 cursor.execute("""
                     SELECT table_id, p1, p2, p3, p4, started
                     FROM games
-                    WHERE p1 = ? OR p2 = ? OR p3 = ? OR p4 = ?
+                    WHERE (p1 = ? OR p2 = ? OR p3 = ? OR p4 = ?) AND stage = ?
                     ORDER BY table_id
-                """, (p_id, p_id, p_id, p_id))
+                """, (p_id, p_id, p_id, p_id, stage))
                 games = cursor.fetchall()
 
                 tables = {}
