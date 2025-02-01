@@ -2,20 +2,36 @@
 import os
 import logging
 import configparser
+from logging.handlers import RotatingFileHandler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 from tenhou_parser import TenhouClient
 from sqlite_parser import SqliteParser
 
-# Enable logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-logging.getLogger("httpx").setLevel(logging.DEBUG)
+# Настройка логирования
+def setup_logging():
+    """Настраивает логирование в консоль и файл."""
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+    # Логирование в консоль
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # Логирование в файл
+    file_handler = RotatingFileHandler("bot.log", maxBytes=5 * 1024 * 1024, backupCount=3)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+# Вызываем настройку логирования при запуске
+setup_logging()
 
 logger = logging.getLogger(__name__)
 
-# Load configuration
+# Загрузка конфигурации
 config = configparser.ConfigParser()
 config.read("config.ini")
 
@@ -25,45 +41,30 @@ lobby = config.get("Settings", "lobby", fallback="C1053882869114720")
 db = SqliteParser(db_path)
 c = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
 
-
-# Load admin IDs
+# Загрузка ID администраторов
 admins = [int(config.get("Admins", key)) for key in config["Admins"] if key.startswith("tg_id")]
 
-# Check if the user is an admin
 def is_admin(user_id: int) -> bool:
+    """Проверяет, является ли пользователь администратором."""
     return user_id in admins
 
-def restart_services():
-    """
-    Перезапускает SqliteParser и TenhouClient с новыми настройками.
-    """
-    global db, c
-
-    # Перезагружаем конфигурацию
-    config.read("config.ini")
-
-    # Обновляем путь к базе данных и лобби
-    db_path = config.get("Settings", "database", fallback="season1.db")
-    lobby = config.get("Settings", "lobby", fallback="C1053882869114720")
-
-    # Перезапускаем SqliteParser
-    db = SqliteParser(db_path)
-
-    # Перезапускаем TenhouClient
-    c = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
-
-
-# Глобальная переменная для хранения id готовых игроков
+# Глобальная переменная для хранения ID готовых игроков
 ready_players = set()
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a message when the command /help is issued."""
+    """Отправляет сообщение при команде /help."""
     user = update.effective_user
     logger.info("User %s (%s) issued /help command.", user.username, user.id)
     await update.message.reply_text("Help!")
 
 async def my_games(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Fetch and display a user's games grouped by table with Telegram names and real names."""
+    """
+    Получает и отображает игры пользователя, сгруппированные по столам, только для текущей стадии турнира.
+
+    Args:
+        update (Update): Объект Update от Telegram.
+        context (ContextTypes.DEFAULT_TYPE): Контекст выполнения команды.
+    """
     user_id = update.effective_user.id
     user = update.effective_user
     logger.info("User %s (%s) issued /my_games command.", user.username, user.id)
@@ -79,13 +80,17 @@ async def my_games(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.info("User %s (%s) is not registered in the system.", user.username, user.id)
         return
     
-    tables = db.get_player_games_grouped_by_table(p_id)
+    # Получаем текущую стадию турнира из конфигурации
+    current_stage = config.get("Settings", "stage", fallback="1")
+    
+    # Получаем игры только для текущей стадии турнира
+    tables = db.get_player_games_grouped_by_table(p_id, current_stage)
     if not tables:
-        await update.message.reply_text("У вас нет активных игр.")
-        logger.info("User %s (%s) has no active games.", user.username, user.id)
+        await update.message.reply_text("У вас нет активных игр на текущей стадии турнира.")
+        logger.info("User %s (%s) has no active games on the current stage.", user.username, user.id)
         return
     
-    message = "Ваши игры:\n"
+    message = "Ваши игры на текущей стадии турнира:\n"
     for table_id, table_info in tables.items():
         players = ", ".join([f"@{name[0]} ({name[1]})" for name in table_info['players'] if name])
         started_games = table_info['started_games']
@@ -100,7 +105,7 @@ async def my_games(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("User %s (%s) games: %s", user.username, user.id, message)
 
 async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Marks the user as ready."""
+    """Отмечает пользователя как готового к игре."""
     user_id = update.effective_user.id
     user = update.effective_user
     ready_players.add(user_id)
@@ -108,7 +113,7 @@ async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     logger.info("User %s (%s) marked as ready.", user.username, user.id)
 
 async def unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Marks the user as not ready."""
+    """Отмечает пользователя как не готового к игре."""
     user_id = update.effective_user.id
     user = update.effective_user
     if user_id in ready_players:
@@ -120,7 +125,7 @@ async def unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.info("User %s (%s) was not in the list of ready players.", user.username, user.id)
 
 async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Start a game at a specific table if all players are ready."""
+    """Начинает игру за указанным столом, если все игроки готовы."""
     user = update.effective_user
     logger.info("User %s (%s) issued /start_table command with args: %s", user.username, user.id, context.args)
 
@@ -137,7 +142,7 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.info("No unstarted games at table %s.", table_id)
         return
 
-    # Проверяем, готовы ли все игроки сразу
+    # Проверяем, готовы ли все игроки
     game = games[0]
     p1, p2, p3, p4, game_id = game
     player_ids = [p1, p2, p3, p4]
@@ -171,9 +176,8 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(f"Не удалось начать игру за столом {table_id}.")
         logger.error("Failed to start game at table %s. Result: %s", table_id, result)
 
-# Command to update game status
 async def update_game_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Update the status of a game (admin only)."""
+    """Обновляет статус игры (только для администраторов)."""
     user = update.effective_user
     if not is_admin(user.id):
         await update.message.reply_text("Эта команда доступна только администраторам.")
@@ -200,7 +204,7 @@ async def update_game_status(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.error("Admin %s (%s) failed to update game status with game ID %s to %s.", user.username, user.id, game_id, status)
 
 async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Create a backup of the database (admin only)."""
+    """Создает резервную копию базы данных (только для администраторов)."""
     user = update.effective_user
     if not is_admin(user.id):
         await update.message.reply_text("Эта команда доступна только администраторам.")
@@ -210,23 +214,41 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("Резервная копия базы данных успешно создана.")
     logger.info("Admin %s (%s) created a database backup.", user.username, user.id)
 
-# Глобальные переменные для режима ожидания
-awaiting_db_upload = False
-awaiting_settings_upload = False
-
-# Команда для получения текущей базы данных
-async def get_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def get_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправляет файл с логами администратору."""
     user = update.effective_user
     if not is_admin(user.id):
         await update.message.reply_text("Эта команда доступна только администраторам.")
         return
 
-    with open(db.db_path, 'rb') as db_file:
+    try:
+        with open("bot.log", "rb") as log_file:
+            await update.message.reply_document(document=log_file)
+        logger.info("Admin %s (%s) requested the log file.", user.username, user.id)
+    except FileNotFoundError:
+        await update.message.reply_text("Файл с логами не найден.")
+        logger.error("Log file not found for admin %s (%s).", user.username, user.id)
+    except Exception as e:
+        await update.message.reply_text(f"Произошла ошибка при отправке логов: {e}")
+        logger.error("Error sending log file to admin %s (%s): %s", user.username, user.id, e)
+
+# Глобальные переменные для режима ожидания
+awaiting_db_upload = False
+awaiting_settings_upload = False
+
+async def get_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправляет текущую базу данных администратору."""
+    user = update.effective_user
+    if not is_admin(user.id):
+        await update.message.reply_text("Эта команда доступна только администраторам.")
+        return
+
+    with open(db.db_path, "rb") as db_file:
         await update.message.reply_document(document=db_file)
     logger.info("Admin %s (%s) requested the database.", user.username, user.id)
 
-# Команда для загрузки новой базы данных
 async def set_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Загружает новую базу данных (только для администраторов)."""
     global awaiting_db_upload
 
     user = update.effective_user
@@ -238,25 +260,19 @@ async def set_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("Пожалуйста, загрузите файл базы данных.")
     logger.info("Admin %s (%s) initiated database upload.", user.username, user.id)
 
-# Команда для получения текущих настроек
 async def get_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправляет текущий файл настроек администратору."""
     user = update.effective_user
     if not is_admin(user.id):
         await update.message.reply_text("Эта команда доступна только администраторам.")
         return
 
-    with open("config.ini", 'rb') as settings_file:
+    with open("config.ini", "rb") as settings_file:
         await update.message.reply_document(document=settings_file)
     logger.info("Admin %s (%s) requested the settings file.", user.username, user.id)
 
 async def set_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Загружает новый файл настроек и перезапускает сервисы.
-
-    Args:
-        update (Update): Объект Update от Telegram.
-        context (ContextTypes.DEFAULT_TYPE): Контекст выполнения команды.
-    """
+    """Загружает новый файл настроек и перезапускает сервисы (только для администраторов)."""
     global awaiting_settings_upload
 
     user = update.effective_user
@@ -269,13 +285,7 @@ async def set_settings_command(update: Update, context: ContextTypes.DEFAULT_TYP
     logger.info("Admin %s (%s) initiated settings upload.", user.username, user.id)
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Обрабатывает загруженные документы (настройки или базу данных).
-
-    Args:
-        update (Update): Объект Update от Telegram.
-        context (ContextTypes.DEFAULT_TYPE): Контекст выполнения команды.
-    """
+    """Обрабатывает загруженные документы (базу данных или настройки)."""
     global awaiting_db_upload, awaiting_settings_upload
 
     user = update.effective_user
@@ -306,23 +316,24 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Заменяем текущий файл настроек новым
         os.replace(new_settings_path, "config.ini")
 
-        # Перезапускаем сервисы с новыми настройками
-        restart_services()
+        # Перезагружаем конфигурацию
+        config.read("config.ini")
 
         awaiting_settings_upload = False
-        await update.message.reply_text("Новый файл настроек успешно загружен и сервисы перезапущены.")
-        logger.info("Admin %s (%s) uploaded a new settings file and restarted services.", user.username, user.id)
+        await update.message.reply_text("Новый файл настроек успешно загружен и конфигурация перезагружена.")
+        logger.info("Admin %s (%s) uploaded a new settings file and reloaded the configuration.", user.username, user.id)
     else:
         await update.message.reply_text("Неожиданно получен файл. Пожалуйста, используйте команду для загрузки перед отправкой файла.")
         logger.info("Unexpected file received from user %s (%s).", user.username, user.id)
 
-
 def main() -> None:
-    """Start the bot."""
-    with open('token.txt', 'r') as file:
+    """Запускает бота."""
+    with open("token.txt", "r") as file:
         token = file.read().strip()
     
     application = Application.builder().token(token).build()
+    
+    # Добавляем обработчики команд
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("my_games", my_games))
     application.add_handler(CommandHandler("ready", ready_command))
@@ -334,8 +345,9 @@ def main() -> None:
     application.add_handler(CommandHandler("set_db", set_db_command))
     application.add_handler(CommandHandler("get_settings", get_settings_command))
     application.add_handler(CommandHandler("set_settings", set_settings_command))
+    application.add_handler(CommandHandler("get_logs", get_logs_command))
     application.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, handle_document))
-
+    
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
