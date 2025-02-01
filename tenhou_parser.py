@@ -1,0 +1,94 @@
+from io import BytesIO
+
+import pycurl
+from urllib.parse import unquote, quote_plus
+
+import random
+
+class TenhouClient():
+    def __init__(self, lobby, game_type, is_enable):
+        self.is_enable = is_enable
+        self.lobby = lobby
+        self.game_type = game_type
+        self.start_game_url = "https://tenhou.net/cs/edit/cmd_start.cgi"
+        self.get_players_url = "https://tenhou.net/cs/edit/cmd_get_players.cgi"
+
+    def is_tenhou_client_enable(self):
+        return self.is_enable
+
+    def get_waited_players(self):
+        """
+        Send request to tenhou.net to get all waited players in lobby
+        """
+        url = self.get_players_url
+
+        headers = [
+            "Origin: https://tenhou.net",
+            "Content-Type: text/plain;charset=UTF-8",
+            "Referer: https://tenhou.net/cs/edit/?{}".format(self.lobby),
+        ]
+
+        data = f"L={self.lobby}"
+
+        try:
+            buffer = BytesIO()
+            c = pycurl.Curl()
+            c.setopt(c.URL, url)
+            c.setopt(c.HTTPHEADER, headers)
+            c.setopt(c.POSTFIELDS, data)
+            c.setopt(c.WRITEDATA, buffer)
+            c.setopt(pycurl.SSL_VERIFYPEER, 0)
+            c.setopt(pycurl.SSL_VERIFYHOST, 0)
+            c.perform()
+            c.close()
+
+            response = buffer.getvalue()
+            result = unquote(response.decode("utf-8"))
+            # 'IDLE=NoNameA,FrozenM&PLAY=...'
+            waited_players = \
+                [x.strip() for x in result[result.index('IDLE=') + 5:result.index('&PLAY')].split(",") if x]
+            return waited_players, True
+        except Exception as e:
+            return str(e), False
+
+    def start_game(self, player_names):
+        """
+        Send request to tenhou.net to start a new game in the tournament lobby
+        """
+        url = self.start_game_url
+        players = quote_plus("\r\n".join([x for x in player_names]))
+
+        headers = [
+            "Origin: https://tenhou.net",
+            "Content-Type: text/plain;charset=UTF-8",
+            "Referer: https://tenhou.net/cs/edit/?{}".format(self.lobby),
+        ]
+
+        data = f"L={self.lobby}&R2={self.game_type}&M={players}&RND=default&WG=1&PW="
+        try:
+            buffer = BytesIO()
+            c = pycurl.Curl()
+            c.setopt(c.URL, url)
+            c.setopt(c.HTTPHEADER, headers)
+            c.setopt(c.POSTFIELDS, data)
+            c.setopt(c.WRITEDATA, buffer)
+            c.setopt(pycurl.SSL_VERIFYPEER, 0)
+            c.setopt(pycurl.SSL_VERIFYHOST, 0)
+            c.perform()
+            c.close()
+
+            response = buffer.getvalue()
+            result = unquote(response.decode("utf-8"))
+
+            if result.startswith("FAILED"):
+                return "FAILED", [], False
+            elif result.startswith("MEMBER NOT FOUND"):
+                missed_player_ids = [x for x in result.split("\r\n")[1:] if x]
+                return "MEMBER NOT FOUND", missed_player_ids, False
+            elif result.startswith("OK"):
+                return "STARTED", [], True
+        except Exception as e:
+            return "EXCEPTION", [], False
+
+
+c = TenhouClient(lobby="C1053882869114720", game_type="0009", is_enable=True)
