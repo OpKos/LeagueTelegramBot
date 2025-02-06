@@ -49,42 +49,46 @@ class SqliteParser:
             logger.error("Error in get_telegram_name_by_pid: %s", str(e))
             return None
 
-    def get_player_games_grouped_by_table(self, p_id: int, stage: int):
-        """Возвращает информацию об играх, сгруппированных по столам, с именами игроков из Telegram и их настоящими именами."""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT table_id, p1, p2, p3, p4, started
-                    FROM games
-                    WHERE (p1 = ? OR p2 = ? OR p3 = ? OR p4 = ?) AND stage = ?
-                    ORDER BY table_id
-                """, (p_id, p_id, p_id, p_id, stage))
-                games = cursor.fetchall()
+    def get_player_games_grouped_by_table(self, p_id: int, stage: str):
+        """
+        Возвращает информацию об играх, сгруппированных по столам, для указанной стадии турнира.
 
-                tables = {}
-                for game in games:
-                    table_id, p1, p2, p3, p4, started = game
-                    if table_id not in tables:
-                        player_names = [
+        Args:
+            p_id (int): ID игрока.
+            stage (str): Стадия турнира.
+
+        Returns:
+            dict: Информация о столах и играх.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT table_id, p1, p2, p3, p4, started
+                FROM games
+                WHERE (p1 = ? OR p2 = ? OR p3 = ? OR p4 = ?) AND stage = ?
+                ORDER BY table_id
+            """, (p_id, p_id, p_id, p_id, stage))
+            games = cursor.fetchall()
+
+            tables = {}
+            for game in games:
+                table_id, p1, p2, p3, p4, started = game
+                if table_id not in tables:
+                    tables[table_id] = {
+                        'players': [
                             (self.get_telegram_name_by_pid(p1), self.get_irl_name_by_pid(p1)),
                             (self.get_telegram_name_by_pid(p2), self.get_irl_name_by_pid(p2)),
                             (self.get_telegram_name_by_pid(p3), self.get_irl_name_by_pid(p3)),
-                            (self.get_telegram_name_by_pid(p4), self.get_irl_name_by_pid(p4)),
-                        ]
-                        tables[table_id] = {
-                            'players': player_names,
-                            'total_games': 0,
-                            'started_games': 0
-                        }
-                    tables[table_id]['total_games'] += 1
-                    if started:
-                        tables[table_id]['started_games'] += 1
+                            (self.get_telegram_name_by_pid(p4), self.get_irl_name_by_pid(p4))
+                        ],
+                        'total_games': 0,
+                        'started_games': 0
+                    }
+                tables[table_id]['total_games'] += 1
+                if started:
+                    tables[table_id]['started_games'] += 1
 
-                return tables
-        except sqlite3.Error as e:
-            logger.error("Error in get_player_games_grouped_by_table: %s", str(e))
-            return {}
+            return tables
 
     def get_tenhou_name_by_pid(self, p_id: int):
         """Возвращает tenhou_name игрока по его p_id."""

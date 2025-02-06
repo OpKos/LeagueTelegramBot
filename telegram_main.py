@@ -92,15 +92,13 @@ async def my_games(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     message = "Ваши игры на текущей стадии турнира:\n"
     for table_id, table_info in tables.items():
-        players = ", ".join([f"@{name[0]} ({name[1]})" for name in table_info['players'] if name])
+        message += f"Стол {table_id}:\n"
+        for name in table_info['players']:
+            if name:
+                message += f"Игрок: @{name[0]} ({name[1]})\n"
         started_games = table_info['started_games']
         total_games = table_info['total_games']
-        message += (
-            f"Стол {table_id}:\n"
-            f"Игроки: {players}\n"
-            f"Сыграно игр: {started_games} из {total_games}\n\n"
-        )
-    
+        message += f"Сыграно игр: {started_games} из {total_games}\n\n"
     await update.message.reply_text(message)
     logger.info("User %s (%s) games: %s", user.username, user.id, message)
 
