@@ -51,6 +51,23 @@ def is_admin(user_id: int) -> bool:
 # Глобальная переменная для хранения ID готовых игроков
 ready_players = set()
 
+def restart_services():
+    """Перезапускает SqliteParser и TenhouClient с новыми настройками."""
+    global db, c
+
+    # Перезагружаем конфигурацию
+    config.read("config.ini")
+
+    # Обновляем путь к базе данных и параметры лобби
+    db_path = config.get("Settings", "database")
+    lobby = config.get("Settings", "lobby")
+
+    # Перезапускаем SqliteParser
+    db = SqliteParser(db_path)
+
+    # Перезапускаем TenhouClient
+    c = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет сообщение при команде /help."""
     user = update.effective_user
@@ -283,6 +300,46 @@ async def set_settings_command(update: Update, context: ContextTypes.DEFAULT_TYP
     logger.info("Admin %s (%s) initiated settings upload.", user.username, user.id)
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обрабатывает загруженные документы (базу данных или настройки)."""
+    global awaiting_db_upload, awaiting_settings_upload
+
+    user = update.effective_user
+    if not is_admin(user.id):
+        await update.message.reply_text("Эта команда доступна только администраторам.")
+        return
+
+    document = update.message.document
+    file_path = await document.get_file()
+
+    if awaiting_db_upload:
+        new_db_path = f"{db.db_path}.new"
+        await file_path.download_to_drive(custom_path=new_db_path)
+
+        # Создаем резервную копию текущей базы данных
+        db.backup_database()
+
+        # Заменяем текущую базу данных новой
+        os.replace(new_db_path, db.db_path)
+        awaiting_db_upload = False
+        await update.message.reply_text("Новая база данных успешно загружена.")
+        logger.info("Admin %s (%s) uploaded a new database.", user.username, user.id)
+
+    elif awaiting_settings_upload:
+        new_settings_path = "config.ini.new"
+        await file_path.download_to_drive(custom_path=new_settings_path)
+
+        # Заменяем текущий файл настроек новым
+        os.replace(new_settings_path, "config.ini")
+
+        # Перезапускаем сервисы с новыми настройками
+        restart_services()
+
+        awaiting_settings_upload = False
+        await update.message.reply_text("Новый файл настроек успешно загружен и сервисы перезапущены.")
+        logger.info("Admin %s (%s) uploaded a new settings file and restarted services.", user.username, user.id)
+    else:
+        await update.message.reply_text("Неожиданно получен файл. Пожалуйста, используйте команду для загрузки перед отправкой файла.")
+        logger.info("Unexpected file received from user %s (%s).", user.username, user.id)
     """Обрабатывает загруженные документы (базу данных или настройки)."""
     global awaiting_db_upload, awaiting_settings_upload
 
