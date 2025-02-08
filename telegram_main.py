@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 config = configparser.ConfigParser()
 config.read("config.ini")
 
-db_path = config.get("Settings", "database", fallback="season1.db")
-lobby = config.get("Settings", "lobby", fallback="C1053882869114720")
+db_path = config.get("Settings", "database")
+lobby = config.get("Settings", "lobby")
 
 db = SqliteParser(db_path)
 c = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
@@ -74,7 +74,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     logger.info("User %s (%s) issued /help command.", user.username, user.id)
     await update.message.reply_text("Help!")
 
-async def my_games(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def my_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Получает и отображает игры пользователя, сгруппированные по столам, только для текущей стадии турнира.
 
@@ -116,8 +116,37 @@ async def my_games(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         started_games = table_info['started_games']
         total_games = table_info['total_games']
         message += f"Сыграно игр: {started_games} из {total_games}\n\n"
+    
     await update.message.reply_text(message)
     logger.info("User %s (%s) games: %s", user.username, user.id, message)
+
+async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Регистрирует нового игрока в системе.
+
+    Args:
+        update (Update): Объект Update от Telegram.
+        context (ContextTypes.DEFAULT_TYPE): Контекст выполнения команды.
+    """
+    user = update.effective_user
+    args = context.args
+
+    if len(args) != 1:
+        await update.message.reply_text("Использование: /register <tenhou_id>")
+        return
+
+    tenhou_id = args[0]
+
+    # Проверяем, не зарегистрирован ли уже пользователь
+    p_id = db.get_player_id_by_tg_id(user.id)
+    if p_id:
+        await update.message.reply_text("Вы уже зарегистрированы в системе.")
+        return
+
+    # Регистрируем нового игрока
+    db.register_player(user.id, user.full_name, tenhou_id)
+    await update.message.reply_text("Вы успешно зарегистрированы!")
+    logger.info("User %s (%s) registered with Tenhou ID %s.", user.username, user.id, tenhou_id)
 
 async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отмечает пользователя как готового к игре."""
@@ -191,7 +220,7 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(f"Не удалось начать игру за столом {table_id}.")
         logger.error("Failed to start game at table %s. Result: %s", table_id, result)
 
-async def update_game_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def update_game_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обновляет статус игры (только для администраторов)."""
     user = update.effective_user
     if not is_admin(user.id):
@@ -246,6 +275,43 @@ async def get_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     except Exception as e:
         await update.message.reply_text(f"Произошла ошибка при отправке логов: {e}")
         logger.error("Error sending log file to admin %s (%s): %s", user.username, user.id, e)
+
+async def force_ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Админская команда для пометки игрока как готового."""
+    user = update.effective_user
+    if not is_admin(user.id):
+        await update.message.reply_text("Эта команда доступна только администраторам.")
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text("Использование: /force_ready <telegram_id>")
+        return
+
+    telegram_id = int(context.args[0])
+
+    # Добавляем пользователя в список готовых
+    ready_players.add(telegram_id)
+    await update.message.reply_text(f"Пользователь с ID {telegram_id} помечен как готов.")
+
+async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Админская команда для снятия готовности игрока."""
+    user = update.effective_user
+    if not is_admin(user.id):
+        await update.message.reply_text("Эта команда доступна только администраторам.")
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text("Использование: /force_unready <telegram_id>")
+        return
+
+    telegram_id = int(context.args[0])
+
+    # Удаляем пользователя из списка готовых
+    if telegram_id in ready_players:
+        ready_players.remove(telegram_id)
+        await update.message.reply_text(f"Пользователь с ID {telegram_id} снят с готовности.")
+    else:
+        await update.message.reply_text(f"Пользователь с ID {telegram_id} не был помечен как готов.")
 
 # Глобальные переменные для режима ожидания
 awaiting_db_upload = False
@@ -331,48 +397,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Заменяем текущий файл настроек новым
         os.replace(new_settings_path, "config.ini")
 
-        # Перезапускаем сервисы с новыми настройками
-        restart_services()
-
-        awaiting_settings_upload = False
-        await update.message.reply_text("Новый файл настроек успешно загружен и сервисы перезапущены.")
-        logger.info("Admin %s (%s) uploaded a new settings file and restarted services.", user.username, user.id)
-    else:
-        await update.message.reply_text("Неожиданно получен файл. Пожалуйста, используйте команду для загрузки перед отправкой файла.")
-        logger.info("Unexpected file received from user %s (%s).", user.username, user.id)
-    """Обрабатывает загруженные документы (базу данных или настройки)."""
-    global awaiting_db_upload, awaiting_settings_upload
-
-    user = update.effective_user
-    if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
-        return
-
-    document = update.message.document
-    file_path = await document.get_file()
-
-    if awaiting_db_upload:
-        new_db_path = f"{db.db_path}.new"
-        await file_path.download_to_drive(custom_path=new_db_path)
-
-        # Создаем резервную копию текущей базы данных
-        db.backup_database()
-
-        # Заменяем текущую базу данных новой
-        os.replace(new_db_path, db.db_path)
-        awaiting_db_upload = False
-        await update.message.reply_text("Новая база данных успешно загружена.")
-        logger.info("Admin %s (%s) uploaded a new database.", user.username, user.id)
-
-    elif awaiting_settings_upload:
-        new_settings_path = "config.ini.new"
-        await file_path.download_to_drive(custom_path=new_settings_path)
-
-        # Заменяем текущий файл настроек новым
-        os.replace(new_settings_path, "config.ini")
-
         # Перезагружаем конфигурацию
         config.read("config.ini")
+        
+        restart_services()
 
         awaiting_settings_upload = False
         await update.message.reply_text("Новый файл настроек успешно загружен и конфигурация перезагружена.")
@@ -390,17 +418,20 @@ def main() -> None:
     
     # Добавляем обработчики команд
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("my_games", my_games))
+    application.add_handler(CommandHandler("my_games", my_games_command))
+    application.add_handler(CommandHandler("register", register_command))
     application.add_handler(CommandHandler("ready", ready_command))
     application.add_handler(CommandHandler("unready", unready_command))
     application.add_handler(CommandHandler("start_table", start_table_command))
-    application.add_handler(CommandHandler("update_game_status", update_game_status))
+    application.add_handler(CommandHandler("update_game_status", update_game_status_command))
     application.add_handler(CommandHandler("backup", backup_command))
     application.add_handler(CommandHandler("get_db", get_db_command))
     application.add_handler(CommandHandler("set_db", set_db_command))
     application.add_handler(CommandHandler("get_settings", get_settings_command))
     application.add_handler(CommandHandler("set_settings", set_settings_command))
     application.add_handler(CommandHandler("get_logs", get_logs_command))
+    application.add_handler(CommandHandler("force_ready", force_ready_command))
+    application.add_handler(CommandHandler("force_unready", force_unready_command))
     application.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, handle_document))
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)

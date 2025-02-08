@@ -10,6 +10,31 @@ class SqliteParser:
     def __init__(self, db_path: str):
         self.db_path = db_path
 
+    def register_player(self, telegram_id: int, telegram_name: str, tenhou_id: str):
+        """
+        Регистрирует нового игрока в системе.
+
+        Args:
+            telegram_id (int): Telegram ID игрока.
+            telegram_name (str): Имя игрока в Telegram.
+            tenhou_id (str): Tenhou ID игрока.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO players (telegram_id, telegram_name, tenhou_name, enable_seating)
+                VALUES (?, ?, ?, 0)
+            """, (telegram_id, telegram_name, tenhou_id))
+            conn.commit()
+    
+    def fill_player_data(self, p_id: int, irl_name:str, include_status: int):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE players SET irl_name = ?, enable_seating = ? WHERE p_id = ?", (irl_name, include_status, p_id))
+        except sqlite3.Error as e:
+            logger.error("Error in get_player_id_by_tg_id: %s", str(e))
+    
     def get_player_id_by_tg_id(self, telegram_id: int):
         """Возвращает p_id игрока по его telegram_id."""
         try:
@@ -22,6 +47,18 @@ class SqliteParser:
             logger.error("Error in get_player_id_by_tg_id: %s", str(e))
             return None
 
+    def get_player_id_by_tenhou_id(self, tenhou_id: str):
+        """Возвращает p_id игрока по его telegram_id."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT p_id FROM players WHERE tenhou_name = ?", (tenhou_id,))
+                player = cursor.fetchone()
+            return player[0] if player else None
+        except sqlite3.Error as e:
+            logger.error("Error in get_player_id_by_tenhou_id: %s", str(e))
+            return None
+    
     def get_player_games(self, p_id: int):
         """Возвращает список игр, в которых участвует игрок."""
         try:
