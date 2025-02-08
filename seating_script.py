@@ -1,10 +1,9 @@
-# seating_script.py
 import sqlite3
 import random
 from itertools import combinations
 
 # Глобальные переменные
-STAGE = 1  # Текущая стадия турнира
+STAGE = 2  # Текущая стадия турнира
 NUM_ITERATIONS = 100000  # Количество итераций для поиска лучшей рассадки
 
 def get_players(db_path: str):
@@ -18,12 +17,6 @@ def get_players(db_path: str):
 def get_previous_pairs(db_path: str):
     """
     Возвращает историю пар игроков, которые уже играли вместе.
-
-    Args:
-        db_path (str): Путь к базе данных.
-
-    Returns:
-        set: Множество кортежей (player1, player2), отсортированных по возрастанию.
     """
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
@@ -32,22 +25,13 @@ def get_previous_pairs(db_path: str):
 
     previous_pairs = set()
     for game in games:
-        # Получаем все пары игроков в игре
         pairs = combinations(sorted(game), 2)
         for pair in pairs:
             previous_pairs.add(pair)
     return previous_pairs
 
 def create_seating(players: list):
-    """
-    Создаёт рассадку игроков по столам.
-
-    Args:
-        players (list): Список ID игроков.
-
-    Returns:
-        list: Список столов, где каждый стол — это список из 4 игроков.
-    """
+    """Создаёт рассадку игроков по столам."""
     num_players = len(players)
     tables = []
     for i in range(num_players):
@@ -62,71 +46,50 @@ def create_seating(players: list):
 
 def calculate_repeats(tables: list, previous_pairs: set):
     """
-    Вычисляет количество повторных встреч игроков в рассадке.
-
-    Args:
-        tables (list): Список столов.
-        previous_pairs (set): Множество пар игроков, которые уже играли вместе.
-
-    Returns:
-        int: Количество повторных встреч.
+    Вычисляет количество повторных встреч игроков и возвращает список таких пар.
     """
     repeat_count = 0
+    repeated_pairs = []
     for table in tables:
-        # Все возможные пары игроков за столом
         table_pairs = combinations(sorted(table), 2)
         for pair in table_pairs:
             if pair in previous_pairs:
                 repeat_count += 1
-    return repeat_count
+                repeated_pairs.append(pair)
+    return repeat_count, repeated_pairs
 
 def generate_best_seating(db_path: str):
-    """
-    Генерирует лучшую рассадку, минимизируя повторные встречи.
-
-    Args:
-        db_path (str): Путь к базе данных.
-
-    Returns:
-        tuple: Лучшая рассадка (список столов) и количество повторных встреч.
-    """
+    """Генерирует лучшую рассадку, минимизируя повторные встречи."""
     players = get_players(db_path)
     previous_pairs = get_previous_pairs(db_path)
 
     best_seating = None
     min_repeats = float('inf')
+    best_repeated_pairs = []
 
     for iteration in range(NUM_ITERATIONS):
         random.shuffle(players)
         seating = create_seating(players)
-        repeats = calculate_repeats(seating, previous_pairs)
+        repeats, repeated_pairs = calculate_repeats(seating, previous_pairs)
         if repeats < min_repeats:
             min_repeats = repeats
             best_seating = seating
+            best_repeated_pairs = repeated_pairs
 
-        # Выводим прогресс каждые 10000 итераций
         if (iteration + 1) % 10000 == 0:
             print(f"Осталось итераций: {NUM_ITERATIONS - iteration - 1}")
 
-    return best_seating, min_repeats
+    return best_seating, min_repeats, best_repeated_pairs
 
 def create_games(db_path: str, tables: list):
-    """
-    Создаёт игры для каждого стола.
-
-    Args:
-        db_path (str): Путь к базе данных.
-        tables (list): Список столов.
-    """
+    """Создаёт игры для каждого стола."""
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
-        # Получаем максимальный номер стола
         cursor.execute("SELECT MAX(table_id) FROM games")
         max_table_id = cursor.fetchone()[0] or 0
 
         for table in tables:
             max_table_id += 1
-            # Создаём 3 игры для каждого стола: ABCD, BDAC, CADB
             games = [
                 (max_table_id, table[0], table[1], table[2], table[3]),  # ABCD
                 (max_table_id, table[1], table[3], table[0], table[2]),  # BDAC
@@ -142,13 +105,12 @@ def create_games(db_path: str, tables: list):
 def main():
     db_path = "season1.db"
 
-    # Генерируем лучшую рассадку
-    best_seating, repeats = generate_best_seating(db_path)
-    print("Лучшая рассадка:", best_seating)
+    best_seating, repeats, repeated_pairs = generate_best_seating(db_path)
     print("Количество повторных встреч:", repeats)
+    print("Повторяющиеся пары игроков:", sorted(repeated_pairs))
 
-    # Создаём игры для лучшей рассадки
-    create_games(db_path, best_seating)
+    if STAGE == 1:
+        create_games(db_path, best_seating)
     print("Игры успешно созданы.")
 
 if __name__ == "__main__":
