@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import json
 
 # URL страницы
-url = "https://mahjong.click/ru/tournaments/riichi/winter-online-tournament-2025/announcement/"
+url = "https://mahjong.click/ru/tournaments/riichi/yoroshiku-league-2/announcement/"
 ena = 1
 
 # Отправляем запрос на страницу

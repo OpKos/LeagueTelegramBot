@@ -150,23 +150,35 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отмечает пользователя как готового к игре."""
-    user_id = update.effective_user.id
     user = update.effective_user
-    ready_players.add(user_id)
+    tenhou_name = db.get_tenhou_name_by_pid(db.get_player_id_by_tg_id(user.id))
+
+    if not tenhou_name:
+        logger.warning("Attempted action by unregistered user: %s (%s)", update.effective_user.username, update.effective_user.id)
+        await update.message.reply_text("Вы не зарегистрированы.")
+        return
+
+    ready_players.add(tenhou_name)
     await update.message.reply_text("Вы готовы к игре!")
-    logger.info("User %s (%s) marked as ready.", user.username, user.id)
+    logger.info("User %s (%s) marked as ready.", tenhou_name, user.full_name)
 
 async def unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отмечает пользователя как не готового к игре."""
-    user_id = update.effective_user.id
+    """Снимает отметку готовности пользователя."""
     user = update.effective_user
-    if user_id in ready_players:
-        ready_players.remove(user_id)
+    tenhou_name = db.get_tenhou_name_by_pid(db.get_player_id_by_tg_id(user.id))
+
+    
+    if not tenhou_name:
+        await update.message.reply_text("Вы не зарегистрированы.")
+        return
+
+    if tenhou_name in ready_players:
+        ready_players.remove(tenhou_name)
+        logger.info("User %s (%s) unmarked as ready.", tenhou_name, user.full_name)
         await update.message.reply_text("Вы больше не готовы к игре.")
-        logger.info("User %s (%s) marked as not ready.", user.username, user.id)
     else:
-        await update.message.reply_text("Вы не были в списке готовых игроков.")
-        logger.info("User %s (%s) was not in the list of ready players.", user.username, user.id)
+        logger.info("User %s (%s) was not marked as ready.", tenhou_name, user.full_name)
+        await update.message.reply_text("Вы не были помечены как готовые.")
 
 async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Начинает игру за указанным столом, если все игроки готовы."""
@@ -191,20 +203,19 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     p1, p2, p3, p4, game_id = game
     player_ids = [p1, p2, p3, p4]
 
-    not_ready_players = [player_id for player_id in player_ids if player_id not in ready_players]
-    if not_ready_players:
-        not_ready_names = [db.get_irl_name_by_pid(player_id) for player_id in not_ready_players]
-        await update.message.reply_text(f"Не все игроки за столом {table_id} готовы: {', '.join(not_ready_names)}")
-        logger.info("Not all players at table %s are ready: %s", table_id, not_ready_names)
-        return
-
-    # Используем ники Tenhou при вызове TenhouClient
     player_names = [
         db.get_tenhou_name_by_pid(p1),
         db.get_tenhou_name_by_pid(p2),
         db.get_tenhou_name_by_pid(p3),
         db.get_tenhou_name_by_pid(p4)
     ]
+    
+    not_ready_players = [player_nick for player_nick in player_names if player_nick not in ready_players]
+    if not_ready_players:
+        await update.message.reply_text(f"Не все игроки за столом {table_id} готовы: {', '.join(not_ready_players)}")
+        logger.info("Not all players at table %s are ready: %s", table_id, not_ready_players)
+        print(ready_players)
+        return
 
     result, missed_players, success = c.start_game(player_names)
     if success:
@@ -212,7 +223,7 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.info("Game at table %s started with players: %s", table_id, player_names)
 
         # Обновляем статус игры в базе данных
-        db.update_game_status(game_id, "started")
+        db.update_game_status(game_id, 1)
     elif result == "MEMBER NOT FOUND":
         await update.message.reply_text(f"Игра не может быть начата. Не найдены игроки: {', '.join(missed_players)}")
         logger.info("Game at table %s could not be started. Members not found: %s", table_id, missed_players)
@@ -288,10 +299,14 @@ async def force_ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     telegram_id = int(context.args[0])
+    tenhou_name = db.get_tenhou_name_by_pid(db.get_player_id_by_tg_id(telegram_id))
 
-    # Добавляем пользователя в список готовых
-    ready_players.add(telegram_id)
-    await update.message.reply_text(f"Пользователь с ID {telegram_id} помечен как готов.")
+    if not tenhou_name:
+        await update.message.reply_text("Пользователь не зарегистрирован.")
+        return
+
+    ready_players.add(tenhou_name)
+    await update.message.reply_text(f"Игрок {tenhou_name} помечен как готов.")
 
 async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Админская команда для снятия готовности игрока."""
@@ -305,14 +320,18 @@ async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     telegram_id = int(context.args[0])
+    tenhou_name = db.get_tenhou_name_by_pid(db.get_player_id_by_tg_id(telegram_id))
 
-    # Удаляем пользователя из списка готовых
-    if telegram_id in ready_players:
-        ready_players.remove(telegram_id)
-        await update.message.reply_text(f"Пользователь с ID {telegram_id} снят с готовности.")
+    if not tenhou_name:
+        await update.message.reply_text("Пользователь не зарегистрирован.")
+        return
+
+    if tenhou_name in ready_players:
+        ready_players.remove(tenhou_name)
+        await update.message.reply_text(f"Игрок {tenhou_name} снят с готовности.")
     else:
-        await update.message.reply_text(f"Пользователь с ID {telegram_id} не был помечен как готов.")
-
+        await update.message.reply_text(f"Игрок {tenhou_name} не был помечен как готов.")
+        
 # Глобальные переменные для режима ожидания
 awaiting_db_upload = False
 awaiting_settings_upload = False
