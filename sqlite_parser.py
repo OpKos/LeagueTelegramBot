@@ -27,6 +27,13 @@ class SqliteParser:
             """, (telegram_id, telegram_name, tenhou_id))
             conn.commit()
     
+    def get_games(self, stage: int):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT table_id, p1, p2, p3, p4 FROM games WHERE stage = ?", (stage, ))
+            games = [{'table': row[0], 'players': [int(i) for i in row[1:]]} for row in cursor.fetchall()]
+        return games
+    
     def fill_player_data(self, p_id: int, irl_name:str, include_status: int):
         try:
             with sqlite3.connect(self.db_path) as conn:

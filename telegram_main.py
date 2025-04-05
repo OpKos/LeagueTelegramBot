@@ -68,12 +68,6 @@ def restart_services():
     # Перезапускаем TenhouClient
     c = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправляет сообщение при команде /help."""
-    user = update.effective_user
-    logger.info("User %s (%s) issued /help command.", user.username, user.id)
-    await update.message.reply_text("Help!")
-
 async def my_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Получает и отображает игры пользователя, сгруппированные по столам, только для текущей стадии турнира.
@@ -112,7 +106,7 @@ async def my_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         message += f"Стол {table_id}:\n"
         for name in table_info['players']:
             if name:
-                message += f"Игрок: @{name[0]} ({name[1]})\n"
+                message += f"Игрок: {name[1]} (@{name[0]})\n"
         started_games = table_info['started_games']
         total_games = table_info['total_games']
         message += f"Сыграно игр: {started_games} из {total_games}\n\n"
@@ -436,7 +430,6 @@ def main() -> None:
     application = Application.builder().token(token).build()
     
     # Добавляем обработчики команд
-    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("my_games", my_games_command))
     application.add_handler(CommandHandler("register", register_command))
     application.add_handler(CommandHandler("ready", ready_command))

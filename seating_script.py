@@ -3,7 +3,7 @@ import random
 from itertools import combinations
 
 # Глобальные переменные
-STAGE = 2  # Текущая стадия турнира
+STAGE = 1  # Текущая стадия турнира
 NUM_ITERATIONS = 100000  # Количество итераций для поиска лучшей рассадки
 
 def get_players(db_path: str):
