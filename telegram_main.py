@@ -39,7 +39,7 @@ db_path = config.get("Settings", "database")
 lobby = config.get("Settings", "lobby")
 
 db = SqliteParser(db_path)
-c = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
+tenhou_client = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
 
 # Загрузка ID администраторов
 admins = [int(config.get("Admins", key)) for key in config["Admins"] if key.startswith("tg_id")]
@@ -53,7 +53,7 @@ ready_players = set()
 
 def restart_services():
     """Перезапускает SqliteParser и TenhouClient с новыми настройками."""
-    global db, c
+    global db, tenhou_client
 
     # Перезагружаем конфигурацию
     config.read("config.ini")
@@ -66,7 +66,7 @@ def restart_services():
     db = SqliteParser(db_path)
 
     # Перезапускаем TenhouClient
-    c = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
+    tenhou_client = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
 
 async def my_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -197,27 +197,28 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     p1, p2, p3, p4, game_id = game
     player_ids = [p1, p2, p3, p4]
 
-    player_names = [
+    player_nicks = [
         db.get_tenhou_name_by_pid(p1),
         db.get_tenhou_name_by_pid(p2),
         db.get_tenhou_name_by_pid(p3),
         db.get_tenhou_name_by_pid(p4)
     ]
     
-    not_ready_players = [player_nick for player_nick in player_names if player_nick not in ready_players]
+    not_ready_players = [player_nick for player_nick in player_nicks if player_nick not in ready_players]
     if not_ready_players:
         await update.message.reply_text(f"Не все игроки за столом {table_id} готовы: {', '.join(not_ready_players)}")
         logger.info("Not all players at table %s are ready: %s", table_id, not_ready_players)
         print(ready_players)
         return
 
-    result, missed_players, success = c.start_game(player_names)
+    result, missed_players, success = tenhou_client.start_game(player_nicks)
     if success:
-        await update.message.reply_text(f"Игра за столом {table_id} начата!")
-        logger.info("Game at table %s started with players: %s", table_id, player_names)
-
-        # Обновляем статус игры в базе данных
+        logger.info("Game at table %s started with players: %s", table_id, player_nicks)
         db.update_game_status(game_id, 1)
+        await update.message.reply_text(f"Игра за столом {table_id} начата!")
+        bot = context.bot
+        await bot.send_message(chat_id="@kawaleague", text=f"Игра за столом {table_id} начата!")
+        
     elif result == "MEMBER NOT FOUND":
         await update.message.reply_text(f"Игра не может быть начата. Не найдены игроки: {', '.join(missed_players)}")
         logger.info("Game at table %s could not be started. Members not found: %s", table_id, missed_players)
