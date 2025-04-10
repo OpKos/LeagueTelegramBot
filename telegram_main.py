@@ -138,7 +138,7 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     # Регистрируем нового игрока
-    db.register_player(user.id, user.full_name, tenhou_id)
+    db.register_player(user.id, user.username, tenhou_id)
     await update.message.reply_text("Вы успешно зарегистрированы!")
     logger.info("User %s (%s) registered with Tenhou ID %s.", user.username, user.id, tenhou_id)
 
@@ -215,9 +215,9 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     if success:
         logger.info("Game at table %s started with players: %s", table_id, player_nicks)
         db.update_game_status(game_id, 1)
-        await update.message.reply_text(f"Игра за столом {table_id} начата!")
+        await update.message.reply_text(f"Игра за столом {table_id} запущена!")
         bot = context.bot
-        await bot.send_message(chat_id="@kawaleague", text=f"Игра за столом {table_id} начата!")
+        await bot.send_message(chat_id="@kawaleague", text=f"Игра за столом {table_id} ({', '.join([db.get_irl_name_by_pid(i) for i in player_ids])}) запущена!")
         
     elif result == "MEMBER NOT FOUND":
         await update.message.reply_text(f"Игра не может быть начата. Не найдены игроки: {', '.join(missed_players)}")
