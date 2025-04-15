@@ -80,14 +80,14 @@ async def my_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     user = update.effective_user
     logger.info("User %s (%s) issued /my_games command.", user.username, user.id)
 
-    if update.message.chat.type != "private":
-        await update.message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
+    if update.effective_message.chat.type != "private":
+        await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
         return
     
     p_id = db.get_player_id_by_tg_id(user_id)
     
     if not p_id:
-        await update.message.reply_text("Вы не зарегистрированы в системе.")
+        await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
         logger.info("User %s (%s) is not registered in the system.", user.username, user.id)
         return
     
@@ -97,7 +97,7 @@ async def my_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Получаем игры только для текущей стадии турнира
     tables = db.get_player_games_grouped_by_table(p_id, current_stage)
     if not tables:
-        await update.message.reply_text("У вас нет активных игр на текущей стадии турнира.")
+        await update.effective_message.reply_text("У вас нет активных игр на текущей стадии турнира.")
         logger.info("User %s (%s) has no active games on the current stage.", user.username, user.id)
         return
     
@@ -106,12 +106,12 @@ async def my_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         message += f"Стол {table_id}:\n"
         for name in table_info['players']:
             if name:
-                message += f"Игрок: {name[1]} (@{name[0]})\n"
+                message += f"{name[1]} (@{name[0]})\n"
         started_games = table_info['started_games']
         total_games = table_info['total_games']
         message += f"Сыграно игр: {started_games} из {total_games}\n\n"
     
-    await update.message.reply_text(message)
+    await update.effective_message.reply_text(message)
     logger.info("User %s (%s) games: %s", user.username, user.id, message)
 
 async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -126,7 +126,7 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     args = context.args
 
     if len(args) != 1:
-        await update.message.reply_text("Использование: /register <tenhou_id>")
+        await update.effective_message.reply_text("Использование: /register <tenhou_id>")
         return
 
     tenhou_id = args[0]
@@ -134,12 +134,12 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Проверяем, не зарегистрирован ли уже пользователь
     p_id = db.get_player_id_by_tg_id(user.id)
     if p_id:
-        await update.message.reply_text("Вы уже зарегистрированы в системе.")
+        await update.effective_message.reply_text("Вы уже зарегистрированы в системе.")
         return
 
     # Регистрируем нового игрока
     db.register_player(user.id, user.username, tenhou_id)
-    await update.message.reply_text("Вы успешно зарегистрированы!")
+    await update.effective_message.reply_text("Вы успешно зарегистрированы!")
     logger.info("User %s (%s) registered with Tenhou ID %s.", user.username, user.id, tenhou_id)
 
 async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -149,11 +149,11 @@ async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if not tenhou_name:
         logger.warning("Attempted action by unregistered user: %s (%s)", update.effective_user.username, update.effective_user.id)
-        await update.message.reply_text("Вы не зарегистрированы.")
+        await update.effective_message.reply_text("Вы не зарегистрированы.")
         return
 
     ready_players.add(tenhou_name)
-    await update.message.reply_text("Вы готовы к игре!")
+    await update.effective_message.reply_text("Вы готовы к игре!")
     logger.info("User %s (%s) marked as ready.", tenhou_name, user.full_name)
 
 async def unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -163,16 +163,16 @@ async def unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     
     if not tenhou_name:
-        await update.message.reply_text("Вы не зарегистрированы.")
+        await update.effective_message.reply_text("Вы не зарегистрированы.")
         return
 
     if tenhou_name in ready_players:
         ready_players.remove(tenhou_name)
         logger.info("User %s (%s) unmarked as ready.", tenhou_name, user.full_name)
-        await update.message.reply_text("Вы больше не готовы к игре.")
+        await update.effective_message.reply_text("Вы больше не готовы к игре.")
     else:
         logger.info("User %s (%s) was not marked as ready.", tenhou_name, user.full_name)
-        await update.message.reply_text("Вы не были помечены как готовые.")
+        await update.effective_message.reply_text("Вы не были помечены как готовые.")
 
 async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Начинает игру за указанным столом, если все игроки готовы."""
@@ -180,7 +180,7 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     logger.info("User %s (%s) issued /start_table command with args: %s", user.username, user.id, context.args)
 
     if len(context.args) != 1:
-        await update.message.reply_text("Usage: /start_table <table_id>")
+        await update.effective_message.reply_text("Usage: /start_table <table_id>")
         return
 
     table_id = context.args[0]
@@ -188,7 +188,7 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Получаем неначатые игры за указанным столом
     games = db.get_unstarted_games_by_table_id(table_id)
     if not games:
-        await update.message.reply_text(f"Нет неначатых игр за столом {table_id}.")
+        await update.effective_message.reply_text(f"Нет неначатых игр за столом {table_id}.")
         logger.info("No unstarted games at table %s.", table_id)
         return
 
@@ -206,7 +206,7 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     not_ready_players = [player_nick for player_nick in player_nicks if player_nick not in ready_players]
     if not_ready_players:
-        await update.message.reply_text(f"Не все игроки за столом {table_id} готовы: {', '.join(not_ready_players)}")
+        await update.effective_message.reply_text(f"Не все игроки за столом {table_id} готовы: {', '.join(not_ready_players)}")
         logger.info("Not all players at table %s are ready: %s", table_id, not_ready_players)
         print(ready_players)
         return
@@ -215,117 +215,117 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     if success:
         logger.info("Game at table %s started with players: %s", table_id, player_nicks)
         db.update_game_status(game_id, 1)
-        await update.message.reply_text(f"Игра за столом {table_id} запущена!")
+        await update.effective_message.reply_text(f"Игра за столом {table_id} запущена!")
         bot = context.bot
         await bot.send_message(chat_id="@kawaleague", text=f"Игра за столом {table_id} ({', '.join([db.get_irl_name_by_pid(i) for i in player_ids])}) запущена!")
         
     elif result == "MEMBER NOT FOUND":
-        await update.message.reply_text(f"Игра не может быть начата. Не найдены игроки: {', '.join(missed_players)}")
+        await update.effective_message.reply_text(f"Игра не может быть начата. Не найдены игроки: {', '.join(missed_players)}")
         logger.info("Game at table %s could not be started. Members not found: %s", table_id, missed_players)
     else:
-        await update.message.reply_text(f"Не удалось начать игру за столом {table_id}.")
+        await update.effective_message.reply_text(f"Не удалось начать игру за столом {table_id}.")
         logger.error("Failed to start game at table %s. Result: %s", table_id, result)
 
 async def update_game_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обновляет статус игры (только для администраторов)."""
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
     
     if len(context.args) != 2:
-        await update.message.reply_text("Usage: /update_game_status <game_id> <status>")
+        await update.effective_message.reply_text("Usage: /update_game_status <game_id> <status>")
         return
 
     game_id = context.args[0]
     status = context.args[1]
 
     if status not in ["1", "0"]:
-        await update.message.reply_text("Invalid status. Use '1' for started or '0' for not started.")
+        await update.effective_message.reply_text("Invalid status. Use '1' for started or '0' for not started.")
         return
 
     success = db.update_game_status(game_id, int(status))
     if success:
         status_text = "started" if status == "1" else "not started"
-        await update.message.reply_text(f"Статус игры с ID {game_id} успешно обновлен на '{status_text}'.")
+        await update.effective_message.reply_text(f"Статус игры с ID {game_id} успешно обновлен на '{status_text}'.")
         logger.info("Admin %s (%s) updated game status with game ID %s to %s.", user.username, user.id, game_id, status_text)
     else:
-        await update.message.reply_text(f"Не удалось обновить статус игры с ID {game_id}.")
+        await update.effective_message.reply_text(f"Не удалось обновить статус игры с ID {game_id}.")
         logger.error("Admin %s (%s) failed to update game status with game ID %s to %s.", user.username, user.id, game_id, status)
 
 async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Создает резервную копию базы данных (только для администраторов)."""
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
     db.backup_database()
-    await update.message.reply_text("Резервная копия базы данных успешно создана.")
+    await update.effective_message.reply_text("Резервная копия базы данных успешно создана.")
     logger.info("Admin %s (%s) created a database backup.", user.username, user.id)
 
 async def get_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет файл с логами администратору."""
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
     try:
         with open("bot.log", "rb") as log_file:
-            await update.message.reply_document(document=log_file)
+            await update.effective_message.reply_document(document=log_file)
         logger.info("Admin %s (%s) requested the log file.", user.username, user.id)
     except FileNotFoundError:
-        await update.message.reply_text("Файл с логами не найден.")
+        await update.effective_message.reply_text("Файл с логами не найден.")
         logger.error("Log file not found for admin %s (%s).", user.username, user.id)
     except Exception as e:
-        await update.message.reply_text(f"Произошла ошибка при отправке логов: {e}")
+        await update.effective_message.reply_text(f"Произошла ошибка при отправке логов: {e}")
         logger.error("Error sending log file to admin %s (%s): %s", user.username, user.id, e)
 
 async def force_ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Админская команда для пометки игрока как готового."""
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
     if len(context.args) != 1:
-        await update.message.reply_text("Использование: /force_ready <telegram_id>")
+        await update.effective_message.reply_text("Использование: /force_ready <telegram_id>")
         return
 
     telegram_id = int(context.args[0])
     tenhou_name = db.get_tenhou_name_by_pid(db.get_player_id_by_tg_id(telegram_id))
 
     if not tenhou_name:
-        await update.message.reply_text("Пользователь не зарегистрирован.")
+        await update.effective_message.reply_text("Пользователь не зарегистрирован.")
         return
 
     ready_players.add(tenhou_name)
-    await update.message.reply_text(f"Игрок {tenhou_name} помечен как готов.")
+    await update.effective_message.reply_text(f"Игрок {tenhou_name} помечен как готов.")
 
 async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Админская команда для снятия готовности игрока."""
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
     if len(context.args) != 1:
-        await update.message.reply_text("Использование: /force_unready <telegram_id>")
+        await update.effective_message.reply_text("Использование: /force_unready <telegram_id>")
         return
 
     telegram_id = int(context.args[0])
     tenhou_name = db.get_tenhou_name_by_pid(db.get_player_id_by_tg_id(telegram_id))
 
     if not tenhou_name:
-        await update.message.reply_text("Пользователь не зарегистрирован.")
+        await update.effective_message.reply_text("Пользователь не зарегистрирован.")
         return
 
     if tenhou_name in ready_players:
         ready_players.remove(tenhou_name)
-        await update.message.reply_text(f"Игрок {tenhou_name} снят с готовности.")
+        await update.effective_message.reply_text(f"Игрок {tenhou_name} снят с готовности.")
     else:
-        await update.message.reply_text(f"Игрок {tenhou_name} не был помечен как готов.")
+        await update.effective_message.reply_text(f"Игрок {tenhou_name} не был помечен как готов.")
         
 # Глобальные переменные для режима ожидания
 awaiting_db_upload = False
@@ -335,11 +335,11 @@ async def get_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Отправляет текущую базу данных администратору."""
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
     with open(db.db_path, "rb") as db_file:
-        await update.message.reply_document(document=db_file)
+        await update.effective_message.reply_document(document=db_file)
     logger.info("Admin %s (%s) requested the database.", user.username, user.id)
 
 async def set_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -348,22 +348,22 @@ async def set_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
     awaiting_db_upload = True
-    await update.message.reply_text("Пожалуйста, загрузите файл базы данных.")
+    await update.effective_message.reply_text("Пожалуйста, загрузите файл базы данных.")
     logger.info("Admin %s (%s) initiated database upload.", user.username, user.id)
 
 async def get_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет текущий файл настроек администратору."""
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
     with open("config.ini", "rb") as settings_file:
-        await update.message.reply_document(document=settings_file)
+        await update.effective_message.reply_document(document=settings_file)
     logger.info("Admin %s (%s) requested the settings file.", user.username, user.id)
 
 async def set_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -372,11 +372,11 @@ async def set_settings_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
     awaiting_settings_upload = True
-    await update.message.reply_text("Пожалуйста, загрузите файл настроек.")
+    await update.effective_message.reply_text("Пожалуйста, загрузите файл настроек.")
     logger.info("Admin %s (%s) initiated settings upload.", user.username, user.id)
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -385,10 +385,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     user = update.effective_user
     if not is_admin(user.id):
-        await update.message.reply_text("Эта команда доступна только администраторам.")
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
-    document = update.message.document
+    document = update.effective_message.document
     file_path = await document.get_file()
 
     if awaiting_db_upload:
@@ -401,7 +401,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Заменяем текущую базу данных новой
         os.replace(new_db_path, db.db_path)
         awaiting_db_upload = False
-        await update.message.reply_text("Новая база данных успешно загружена.")
+        await update.effective_message.reply_text("Новая база данных успешно загружена.")
         logger.info("Admin %s (%s) uploaded a new database.", user.username, user.id)
 
     elif awaiting_settings_upload:
@@ -417,10 +417,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         restart_services()
 
         awaiting_settings_upload = False
-        await update.message.reply_text("Новый файл настроек успешно загружен и конфигурация перезагружена.")
+        await update.effective_message.reply_text("Новый файл настроек успешно загружен и конфигурация перезагружена.")
         logger.info("Admin %s (%s) uploaded a new settings file and reloaded the configuration.", user.username, user.id)
     else:
-        await update.message.reply_text("Неожиданно получен файл. Пожалуйста, используйте команду для загрузки перед отправкой файла.")
+        await update.effective_message.reply_text("Неожиданно получен файл. Пожалуйста, используйте команду для загрузки перед отправкой файла.")
         logger.info("Unexpected file received from user %s (%s).", user.username, user.id)
 
 def main() -> None:
