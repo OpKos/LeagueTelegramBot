@@ -24,10 +24,10 @@ for i in games:
 games = games2
 
 n = len(games)
-columns = 6
+columns = 7
 rows = (n+columns-1) // columns
 cell_h = 50
-cell_w = 300
+cell_w = 330
 row_h = 5*cell_h
 column_w = cell_w
 gap = 25
@@ -55,4 +55,4 @@ for i in range(n):
         d.text(xy=(x+25, y+cell_h*(j+1.5)), text=players[j], font=name_font, anchor="lm", fill='black')
         
 image.save("seating.png")
-image.show()
+# image.show()
