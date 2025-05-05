@@ -153,7 +153,7 @@ async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     ready_players.add(tenhou_name)
-    await update.effective_message.reply_text("Вы готовы к игре!")
+    await update.effective_message.set_reaction("👍")
     logger.info("User %s (%s) marked as ready.", tenhou_name, user.full_name)
 
 async def unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -169,7 +169,7 @@ async def unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if tenhou_name in ready_players:
         ready_players.remove(tenhou_name)
         logger.info("User %s (%s) unmarked as ready.", tenhou_name, user.full_name)
-        await update.effective_message.reply_text("Вы больше не готовы к игре.")
+        await update.effective_message.set_reaction("👍")
     else:
         logger.info("User %s (%s) was not marked as ready.", tenhou_name, user.full_name)
         await update.effective_message.reply_text("Вы не были помечены как готовые.")
@@ -215,7 +215,7 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     if success:
         logger.info("Game at table %s started with players: %s", table_id, player_nicks)
         db.update_game_status(game_id, 1)
-        await update.effective_message.reply_text(f"Игра за столом {table_id} запущена!")
+        await update.effective_message.set_reaction("👍")
         bot = context.bot
         await bot.send_message(chat_id="@kawaleague", text=f"Игра за столом {table_id} ({', '.join([db.get_irl_name_by_pid(i) for i in player_ids])}) запущена!")
         
@@ -327,6 +327,58 @@ async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await update.effective_message.reply_text(f"Игрок {tenhou_name} не был помечен как готов.")
         
+async def get_player_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Получает игры игрока по его telegram_name (админская команда).
+    Показывает game_id и started для каждой игры.
+    """
+    user = update.effective_user
+    if not is_admin(user.id):
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
+        return
+
+    if update.effective_message.chat.type != "private":
+        await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
+        return
+    
+    if len(context.args) != 1:
+        await update.effective_message.reply_text("Использование: /get_player_games <telegram_name>")
+        return
+
+    telegram_name = context.args[0]
+    
+    if telegram_name[0] == "@":
+        telegram_name = telegram_name[1:]
+    
+    # Получаем ID игрока по telegram_name
+    p_id = db.get_player_id_by_telegram_name(telegram_name)
+    if not p_id:
+        await update.effective_message.reply_text(f"Игрок с именем @{telegram_name} не найден.")
+        return
+
+    # Получаем все игры игрока (не только текущей стадии)
+    games = db.get_all_player_games(p_id)
+    if not games:
+        await update.effective_message.reply_text(f"У игрока @{telegram_name} нет игр.")
+        return
+
+    message = f"Игры игрока @{telegram_name}:\n"
+    for game in games:
+        game_id, table_id, p1, p2, p3, p4, started, stage = game
+        status = "🟢 начата" if started else "🔴 не начата"
+        message += (
+            f"Игра ID: {game_id}, Стол: {table_id}, Стадия: {stage}\n"
+            f"Статус: {status}\n"
+            f"Игроки: "
+            f"@{db.get_telegram_name_by_pid(p1)} ({db.get_tenhou_name_by_pid(p1)}), "
+            f"@{db.get_telegram_name_by_pid(p2)} ({db.get_tenhou_name_by_pid(p2)}), "
+            f"@{db.get_telegram_name_by_pid(p3)} ({db.get_tenhou_name_by_pid(p3)}), "
+            f"@{db.get_telegram_name_by_pid(p4)} ({db.get_tenhou_name_by_pid(p4)})\n\n"
+        )
+
+    await update.effective_message.reply_text(message)
+    logger.info("Admin %s requested games for player %s", user.username, telegram_name)
+        
 # Глобальные переменные для режима ожидания
 awaiting_db_upload = False
 awaiting_settings_upload = False
@@ -428,7 +480,7 @@ def main() -> None:
     with open("token.txt", "r") as file:
         token = file.read().strip()
     
-    application = Application.builder().token(token).build()
+    application = Application.builder().token(token).write_timeout(30).read_timeout(30).build()
     
     # Добавляем обработчики команд
     application.add_handler(CommandHandler("my_games", my_games_command))
@@ -445,6 +497,7 @@ def main() -> None:
     application.add_handler(CommandHandler("get_logs", get_logs_command))
     application.add_handler(CommandHandler("force_ready", force_ready_command))
     application.add_handler(CommandHandler("force_unready", force_unready_command))
+    application.add_handler(CommandHandler("get_player_games", get_player_games_command))
     application.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, handle_document))
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)
