@@ -3,10 +3,12 @@ import os
 import logging
 import configparser
 from logging.handlers import RotatingFileHandler
-from telegram import Update
+from telegram import Update, Message, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 from tenhou_parser import TenhouClient
 from sqlite_parser import SqliteParser
+import datetime
+import pytz
 
 # Настройка логирования
 def setup_logging():
@@ -145,8 +147,8 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отмечает пользователя как готового к игре."""
     user = update.effective_user
-    tenhou_name = db.get_tenhou_name_by_pid(db.get_player_id_by_tg_id(user.id))
-
+    player = db.get_player(telegram_id=user.id)
+    tenhou_name = player["tenhou_name"]
     if not tenhou_name:
         logger.warning("Attempted action by unregistered user: %s (%s)", update.effective_user.username, update.effective_user.id)
         await update.effective_message.reply_text("Вы не зарегистрированы.")
@@ -326,7 +328,26 @@ async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TY
         await update.effective_message.reply_text(f"Игрок {tenhou_name} снят с готовности.")
     else:
         await update.effective_message.reply_text(f"Игрок {tenhou_name} не был помечен как готов.")
-        
+
+async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send the alarm message."""
+    job = context.job
+    started, total = db.get_games_status()
+    await context.bot.send_message(job.chat_id, text=f"Доброе утро, запущено игр: {started}/{total}.")
+
+async def start_status_message_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if not is_admin(user.id):
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
+        return
+    
+    chat_id = update.effective_message.chat_id
+    tz = pytz.timezone("Europe/Moscow")
+    callback_time = datetime.time(hour=10, tzinfo=tz)
+    context.job_queue.run_daily(send_game_status_message, time=callback_time, chat_id="@kawaleague", name=str(chat_id))
+    text = "Timer successfully set!"
+    await update.effective_message.reply_text(text)
+
 async def get_player_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Получает игры игрока по его telegram_name (админская команда).
@@ -477,7 +498,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 def main() -> None:
     """Запускает бота."""
-    with open("token.txt", "r") as file:
+    with open("token_alt.txt", "r") as file:
         token = file.read().strip()
     
     application = Application.builder().token(token).write_timeout(30).read_timeout(30).connect_timeout(30).build()
@@ -498,6 +519,8 @@ def main() -> None:
     application.add_handler(CommandHandler("force_ready", force_ready_command))
     application.add_handler(CommandHandler("force_unready", force_unready_command))
     application.add_handler(CommandHandler("get_player_games", get_player_games_command))
+    application.add_handler(CommandHandler("get_status_message", start_status_message_command))
+    
     application.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, handle_document))
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)
