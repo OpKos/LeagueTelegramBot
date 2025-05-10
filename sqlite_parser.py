@@ -65,6 +65,42 @@ class SqliteParser:
         except sqlite3.Error as e:
             logger.error("Error in get_player_id_by_tenhou_id: %s", str(e))
             return None
+        
+    def get_player_id_by_telegram_name(self, telegram_name: str):
+        """
+        Возвращает p_id игрока по его telegram_name.
+        
+        Args:
+            telegram_name (str): Имя игрока в Telegram (без @)
+        
+        Returns:
+            int: ID игрока или None, если не найден
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT p_id FROM players WHERE telegram_name = ?", (telegram_name,))
+            player = cursor.fetchone()
+        return player[0] if player else None
+
+    def get_all_player_games(self, p_id: int):
+        """
+        Получает все игры игрока (всех стадий) с полной информацией.
+        
+        Args:
+            p_id (int): ID игрока
+        
+        Returns:
+            list: Список кортежей (game_id, table_id, p1, p2, p3, p4, started, stage)
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT game_id, table_id, p1, p2, p3, p4, started, stage 
+                FROM games 
+                WHERE p1 = ? OR p2 = ? OR p3 = ? OR p4 = ?
+                ORDER BY stage, table_id
+            """, (p_id, p_id, p_id, p_id))
+            return cursor.fetchall()
     
     def get_player_games(self, p_id: int):
         """Возвращает список игр, в которых участвует игрок."""

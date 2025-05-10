@@ -480,7 +480,7 @@ def main() -> None:
     with open("token.txt", "r") as file:
         token = file.read().strip()
     
-    application = Application.builder().token(token).write_timeout(30).read_timeout(30).build()
+    application = Application.builder().token(token).write_timeout(30).read_timeout(30).connect_timeout(30).build()
     
     # Добавляем обработчики команд
     application.add_handler(CommandHandler("my_games", my_games_command))

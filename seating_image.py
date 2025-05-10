@@ -49,7 +49,7 @@ for i in range(n):
     y = gap+(i//columns)*(gap+row_h)
     d.rectangle(xy=(x,y,x+column_w,y+row_h), fill='white', outline='black')
     d.rectangle(xy=(x,y,x+cell_w,y+cell_h), fill=yellow, outline='black')
-    d.text(xy=(x+column_w/2, y+cell_h/2), text=f"Стол {i+1}", font=table_font, anchor="mm", fill='black')
+    d.text(xy=(x+column_w/2, y+cell_h/2), text=f"Стол {games[i]['table']}", font=table_font, anchor="mm", fill='black')
     players = games[i]['players']
     for j in range(4):
         d.text(xy=(x+25, y+cell_h*(j+1.5)), text=players[j], font=name_font, anchor="lm", fill='black')
