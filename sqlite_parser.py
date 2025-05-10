@@ -42,6 +42,38 @@ class SqliteParser:
         except sqlite3.Error as e:
             logger.error("Error in get_player_id_by_tg_id: %s", str(e))
     
+    def get_player(self, telegram_id=None, tenhou_name=None, telegram_name=None, p_id=None):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT p_id, telegram_id, telegram_name, tenhou_name, irl_name FROM players WHERE \
+                        telegram_id = ? OR tenhou_name = ? OR telegram_name = ? OR p_id = ?", (telegram_id,tenhou_name,telegram_name,p_id))
+                player = cursor.fetchone()
+                player = {
+                    "p_id": player[0],
+                    "telegram_id": player[1],
+                    "telegram_name": player[2],
+                    "tenhou_name": player[3],
+                    "irl_name": player[4]
+                }
+                return player
+        except sqlite3.Error as e:
+            logger.error("Error in get_player: %s", str(e))
+            return None
+    
+    def get_games_status(self):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM games WHERE started = 1")
+                started = cursor.fetchone()[0]
+                cursor.execute("SELECT COUNT(*) FROM games")
+                total = cursor.fetchone()[0]
+                return started, total
+        except sqlite3.Error as e:
+            logger.error("Error in get_games_status: %s", str(e))
+            return None
+    
     def get_player_id_by_tg_id(self, telegram_id: int):
         """Возвращает p_id игрока по его telegram_id."""
         try:
@@ -205,6 +237,18 @@ class SqliteParser:
         except sqlite3.Error as e:
             logger.error("Error in get_games_by_table_id: %s", str(e))
             return []
+        
+    def get_game(self, game_id: int):
+        """Возвращает игру по id."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT p1, p2, p3, p4, started, game_id, table_id FROM games WHERE game_id = ?", (game_id,))
+                game = cursor.fetchone()
+            return game
+        except sqlite3.Error as e:
+            logger.error("Error in get_game: %s", str(e))
+            return []
 
     def get_unstarted_games_by_table_id(self, table_id: int):
         """Возвращает список неначатых игр за указанным столом."""
@@ -244,3 +288,26 @@ class SqliteParser:
             logger.info(f"Backup created at {backup_path}")
         except Exception as e:
             logger.error("Error in backup_database: %s", str(e))
+            
+    def get_game_message(self, game_id:int) -> int:
+        """Возвращает id сообщения связанного с запуском игры"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                message = cursor.execute("SELECT message_id FROM games WHERE game_id = ?", (game_id,)).fetchall()
+                if message:
+                    return message[0][0]
+        except sqlite3.Error as e:
+            logger.error("Error in get_game_message: %s", str(e))
+            return 0
+    
+    def set_game_message(self, game_id:int, message_id:int):
+        """Выставляет id сообщения связанного с запуском игры"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE games SET message_id = ? WHERE game_id = ?", (message_id, game_id))
+                return True
+        except sqlite3.Error as e:
+            logger.error("Error in get_game_message: %s", str(e))
+            return False
