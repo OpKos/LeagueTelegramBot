@@ -311,3 +311,32 @@ class SqliteParser:
         except sqlite3.Error as e:
             logger.error("Error in get_game_message: %s", str(e))
             return False
+        
+    def set_table_time(self, table_id:int, timestamp:int):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                t = cursor.execute("SELECT table_id, time FROM table_times WHERE table_id = ?", (table_id,)).fetchall()
+                if len(t) > 0:
+                    cursor.execute("UPDATE table_times SET time = ? WHERE table_id = ?", (timestamp, table_id))
+                else:
+                    cursor.execute("INSERT INTO table_times (table_id, time) VALUES (?, ?)", (table_id, timestamp))
+        except sqlite3.Error as e:
+            logger.error("Error in set_table_time: %s", str(e))
+            return False
+        
+    def get_timetable(self):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                times = cursor.execute("SELECT p1, p2, p3, p4, games.table_id, time "
+                                   "FROM games LEFT JOIN table_times ON games.table_id = table_times.table_id WHERE started = 0 GROUP BY games.table_id ORDER BY time").fetchall()
+                times = [{
+                    "players": [self.get_player(p_id=j[0]), self.get_player(p_id=j[1]), self.get_player(p_id=j[2]), self.get_player(p_id=j[3])],
+                    "table_id": j[4],
+                    "time": j[5]
+                    } for j in times]
+                return times
+        except sqlite3.Error as e:
+            logger.error("Error in get_timetable: %s", str(e))
+            return []
