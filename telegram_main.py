@@ -530,16 +530,16 @@ async def get_player_info_command(update: Update, context: ContextTypes.DEFAULT_
         await update.effective_message.reply_text("Пользователь не зарегистрирован.")
         return
 
-    message = f"{player.p_id=}\n"\
-              f"{player.telegram_id=}\n"\
-              f"{player.telegram_name=}\n"\
-              f"{player.tenhou_name=}\n"\
-              f"{player.irl_name=}\n\n"
+    message = f"ID в базе: {player.p_id}\n"\
+              f"Telegram ID: {player.telegram_id}\n"\
+              f"Telegram хэндл: {player.telegram_name}\n"\
+              f"Tenhou ник: {player.tenhou_name}\n"\
+              f"Имя: {player.irl_name}\n\n"
 
     for table in player.visible_tables:
         message += f"Стол {table.table_id}\n"
         for i in table.players:
-            message += f"{i.p_id}: {i.irl_name}"
+            message += f"{i.p_id}: {i.irl_name}\n"
         message += f"Осталось сыграть: {len(table.unfinished_games)} из {len(table.games)} игр\n\n"
     
     if player.invisible_tables:
@@ -550,7 +550,7 @@ async def get_player_info_command(update: Update, context: ContextTypes.DEFAULT_
     
 async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Получает информацию об игроке
+    Получает информацию о столе
     """
     user = update.effective_user
     assert user
@@ -569,10 +569,25 @@ async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_T
     if not table:
         await update.effective_message.reply_text("Стол не найден.")
         return
-    if not table.visible and is_admin(user.id):
+    if not table.visible and not is_admin(user.id):
         await update.effective_message.reply_text("Стол скрыт.")
         return
+
+    message = f"Стол {table.table_id}\n"
+    for i in table.players:
+        message += f"{i.p_id}: {i.irl_name}\n"
+    message += f"Осталось сыграть: {len(table.unfinished_games)} из {len(table.games)} игр\n\n"
     
+    games = table.games
+    for game in games:
+        message+=f"ID игры: {game.game_id}\n"\
+                 f"{'🟢 Запущена' if game.started else '🔴 Не запущена'}\n"
+        for player in game.players:
+            message+=f"{player.irl_name}\n"
+        message+=f"\n"
+    
+    await update.effective_message.reply_text(message)
+    logger.info("Person %s requested info for table %s", user.full_name, table.table_id)
         
 # Глобальные переменные для режима ожидания
 awaiting_db_upload = False
@@ -606,6 +621,21 @@ async def set_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     awaiting_db_upload = True
     await update.effective_message.reply_text("Пожалуйста, загрузите файл базы данных.")
     logger.info("Admin %s (%s) initiated database upload.", user.username, user.id)
+
+
+async def reload_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin command to reload database session"""
+    user = update.effective_user
+    assert user
+    assert update.effective_message
+    if not is_admin(user.id):
+        await update.effective_message.reply_text("🔒 Admin only command")
+        return
+    
+    if db.reload_session():
+        await update.effective_message.reply_text("🔄 Database session reloaded")
+    else:
+        await update.effective_message.reply_text("❌ Failed to reload session")
 
 async def get_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет текущий файл настроек администратору."""
@@ -700,16 +730,19 @@ def main() -> None:
     application.add_handler(CommandHandler("backup", backup_command))
     application.add_handler(CommandHandler("get_db", get_db_command))
     application.add_handler(CommandHandler("set_db", set_db_command))
+    application.add_handler(CommandHandler("reload_db", reload_session_command))
     application.add_handler(CommandHandler("get_settings", get_settings_command))
     application.add_handler(CommandHandler("set_settings", set_settings_command))
     application.add_handler(CommandHandler("get_logs", get_logs_command))
     application.add_handler(CommandHandler("force_ready", force_ready_command))
     application.add_handler(CommandHandler("force_unready", force_unready_command))
     application.add_handler(CommandHandler("get_player_info", get_player_info_command))
+    application.add_handler(CommandHandler("get_table_info", get_table_info_command))
     application.add_handler(CommandHandler("start_status_message", start_status_message_command))
     application.add_handler(CommandHandler("set_time", set_time_command))
     application.add_handler(CommandHandler("timetable", timetable_command))
     application.add_handler(CommandHandler("status", status_command))
+    
     
     application.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, handle_document))
     
