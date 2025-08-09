@@ -21,12 +21,28 @@ class Player(Base):
     tables_seats: Mapped[list["TablePlayer"]] = relationship(back_populates="player", lazy="subquery")
 
     @property
-    def visible_tables(self): return [tp.table for tp in self.tables_seats if getattr(tp.table, "visible", 0)]
+    def visible_tables(self): 
+        return [tp.table for tp in self.tables_seats if getattr(tp.table, "visible", 0)]
+    
     @property
-    def invisible_tables(self): return [tp.table for tp in self.tables_seats if not getattr(tp.table, "visible", 0)]
+    def invisible_tables(self): 
+        return [tp.table for tp in self.tables_seats if not getattr(tp.table, "visible", 0)]
+    
     @property
-    def all_tables(self): return [tp.table for tp in self.tables_seats]
-    def __str__(self): return self.irl_name or ""
+    def all_tables(self): 
+        return [tp.table for tp in self.tables_seats]
+    
+    def dirty_mention(self) -> str:
+        return f"@{self.telegram_name}"
+    
+    def clean_mention(self) -> str:
+        """
+        Only works with ParseMode.HTML
+        """
+        return f"<a href=\'tg://user?id={self.telegram_id}\'>{self.irl_name}</a>"
+    
+    def __str__(self): 
+        return self.irl_name or self.telegram_name
 
 class Game(Base):
     __tablename__ = "games"
@@ -108,12 +124,14 @@ class SqliteParser:
         player.tenhou_name = tenhou_name
         self.session.commit()
             
-    def get_player(self, p_id=None, telegram_id=None, tenhou_name=None):
+    def get_player(self, p_id=None, telegram_id=None, telegram_name=None, tenhou_name=None):
         query = self.session.query(Player)
         if p_id:
             query = query.filter(Player.p_id==p_id)
         if telegram_id:
             query = query.filter(Player.telegram_id==telegram_id)
+        if telegram_name:
+            query = query.filter(Player.telegram_name==telegram_name)
         if tenhou_name:
             query = query.filter(Player.tenhou_name==tenhou_name)
         return query.first()
