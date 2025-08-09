@@ -1,15 +1,17 @@
-# telegram_main.py
-import os
-import logging
+#!/usr/bin/env python3
 import configparser
+import datetime
+import logging
+import os
 from logging.handlers import RotatingFileHandler
-from telegram import Update, Message, InlineKeyboardButton
+
+import pytz
+from telegram import Update, Message, InlineKeyboardButton, User
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+
+from sqlalchemy_parser import SqliteParser
 from tenhou_parser import TenhouClient
-from sqlite_parser import SqliteParser
-import datetime
-import pytz
 
 # Настройка логирования
 def setup_logging():
@@ -79,39 +81,35 @@ async def my_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         update (Update): Объект Update от Telegram.
         context (ContextTypes.DEFAULT_TYPE): Контекст выполнения команды.
     """
-    user_id = update.effective_user.id
     user = update.effective_user
+    assert user
     logger.info("User %s (%s) issued /my_games command.", user.username, user.id)
-
+    assert update.effective_message is not None
     if update.effective_message.chat.type != "private":
         await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
         return
     
-    p_id = db.get_player_id_by_tg_id(user_id)
+    player = db.get_player(telegram_id=user.id)
     
-    if not p_id:
+    if not player:
         await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
         logger.info("User %s (%s) is not registered in the system.", user.username, user.id)
         return
     
-    # Получаем текущую стадию турнира из конфигурации
-    current_stage = config.get("Settings", "stage", fallback="1")
-    
     # Получаем игры только для текущей стадии турнира
-    tables = db.get_player_games_grouped_by_table(p_id, current_stage)
+    tables = player.visible_tables
     if not tables:
         await update.effective_message.reply_text("У вас нет активных игр на текущей стадии турнира.")
         logger.info("User %s (%s) has no active games on the current stage.", user.username, user.id)
         return
     
     message = "Ваши игры на текущей стадии турнира:\n"
-    for table_id, table_info in tables.items():
-        message += f"Стол {table_id}:\n"
-        for name in table_info['players']:
-            if name:
-                message += f"{name[1]} (@{name[0]})\n"
-        started_games = table_info['started_games']
-        total_games = table_info['total_games']
+    for table in tables:
+        message += f"Стол {table.table_id}:\n"
+        for player in table.players:
+            message += f"{player.irl_name} (@{player.telegram_name})\n"
+        started_games = len(table.unfinished_games)
+        total_games = len(table.games)
         message += f"Сыграно игр: {started_games} из {total_games}\n\n"
     
     await update.effective_message.reply_text(message)
@@ -127,69 +125,89 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """
     user = update.effective_user
     args = context.args
-
-    if len(args) != 1:
+    assert update.effective_message
+    assert user
+    
+    if not args or len(args) != 1:
         await update.effective_message.reply_text("Использование: /register <tenhou_id>")
         return
 
-    tenhou_id = args[0]
+    tenhou_name = args[0]
 
     # Проверяем, не зарегистрирован ли уже пользователь
-    p_id = db.get_player_id_by_tg_id(user.id)
-    if p_id:
-        await update.effective_message.reply_text("Вы уже зарегистрированы в системе.")
+    player = db.get_player(telegram_id=user.id)
+    if player:
+        old_name = player.tenhou_name
+        if old_name == tenhou_name:
+            await update.effective_message.reply_text("Вы уже зарегистрированы в системе.")
+        else:
+            db.update_tenhou_nick(p_id=player.p_id, tenhou_name=tenhou_name)
+            await update.effective_message.reply_text(f"Ник изменён с {old_name} на {tenhou_name}.")
         return
 
     # Регистрируем нового игрока
-    db.register_player(user.id, user.username, tenhou_id)
+    db.register_player(telegram_id=user.id, telegram_name=user.username, tenhou_id=tenhou_name)
     await update.effective_message.reply_text("Вы успешно зарегистрированы!")
-    logger.info("User %s (%s) registered with Tenhou ID %s.", user.username, user.id, tenhou_id)
+    logger.info("User %s (%s) registered with Tenhou ID %s.", user.username, user.id, tenhou_name)
 
 async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отмечает пользователя как готового к игре."""
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    
     player = db.get_player(telegram_id=user.id)
-    tenhou_name = player["tenhou_name"]
-    if not tenhou_name:
-        logger.warning("Attempted action by unregistered user: %s (%s)", update.effective_user.username, update.effective_user.id)
+    
+    if not player:
+        logger.warning("Attempted action by unregistered user: %s (%s)", user.full_name, user.id)
         await update.effective_message.reply_text("Вы не зарегистрированы.")
         return
 
-    ready_players.add(tenhou_name)
+    ready_players.add(player.p_id)
     await update.effective_message.set_reaction("👍")
-    logger.info("User %s (%s) marked as ready.", tenhou_name, user.full_name)
+    logger.info("User %s (%s) marked as ready.", player.p_id, user.full_name)
 
 async def unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Снимает отметку готовности пользователя."""
     user = update.effective_user
-    tenhou_name = db.get_tenhou_name_by_pid(db.get_player_id_by_tg_id(user.id))
-
+    assert user
+    assert update.effective_message
     
-    if not tenhou_name:
+    player = db.get_player(telegram_id=user.id)
+    
+    if not player:
         await update.effective_message.reply_text("Вы не зарегистрированы.")
         return
 
-    if tenhou_name in ready_players:
-        ready_players.remove(tenhou_name)
-        logger.info("User %s (%s) unmarked as ready.", tenhou_name, user.full_name)
+    if player.p_id in ready_players:
+        ready_players.remove(player.p_id)
+        logger.info("User %s (%s) unmarked as ready.", player.p_id, user.full_name)
         await update.effective_message.set_reaction("👍")
     else:
-        logger.info("User %s (%s) was not marked as ready.", tenhou_name, user.full_name)
+        logger.info("User %s (%s) was not marked as ready.", player.p_id, user.full_name)
         await update.effective_message.reply_text("Вы не были помечены как готовые.")
 
 async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Начинает игру за указанным столом, если все игроки готовы."""
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    
     logger.info("User %s (%s) issued /start_table command with args: %s", user.username, user.id, context.args)
 
-    if len(context.args) != 1:
+    if not context.args or len(context.args) != 1:
         await update.effective_message.reply_text("Usage: /start_table <table_id>")
         return
 
-    table_id = context.args[0]
+    table_id = int(context.args[0])
+    table = db.get_visible_table(table_id)
 
-    # Получаем неначатые игры за указанным столом
-    games = db.get_unstarted_games_by_table_id(table_id)
+    if not table:
+        await update.effective_message.reply_text(f"Стол {table_id} не найден.")
+        logger.info("Table %s not found.", table_id)
+        return
+
+    games = table.unfinished_games
     if not games:
         await update.effective_message.reply_text(f"Нет неначатых игр за столом {table_id}.")
         logger.info("No unstarted games at table %s.", table_id)
@@ -197,29 +215,22 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     # Проверяем, готовы ли все игроки
     game = games[0]
-    p1, p2, p3, p4, game_id = game
-    player_ids = [p1, p2, p3, p4]
 
-    player_nicks = [
-        db.get_tenhou_name_by_pid(p1),
-        db.get_tenhou_name_by_pid(p2),
-        db.get_tenhou_name_by_pid(p3),
-        db.get_tenhou_name_by_pid(p4)
-    ]
-    
-    not_ready_players = [player_nick for player_nick in player_nicks if player_nick not in ready_players]
+    not_ready_players = [player.tenhou_name for player in game.players if player.p_id not in ready_players]
     if not_ready_players:
         await update.effective_message.reply_text(f"Не все игроки за столом {table_id} готовы: {', '.join(not_ready_players)}")
         logger.info("Not all players at table %s are ready: %s", table_id, not_ready_players)
         return
 
-    result, missed_players, success = tenhou_client.start_game(player_nicks)
+    player_nicks = [player.tenhou_name for player in game.players]
+    
+    result, missed_players, success = tenhou_client.start_game(player_nicks) # pyright: ignore[reportGeneralTypeIssues]
     if success:
         logger.info("Game at table %s started with players: %s", table_id, player_nicks)
-        db.update_game_status(game_id, 1)
+        db.set_game_status(game.game_id, 1)
         await update.effective_message.set_reaction("👍")
         bot = context.bot
-        await bot.send_message(chat_id="@kawaleague", text=f"Игра за столом {table_id} ({', '.join([db.get_irl_name_by_pid(i) for i in player_ids])}) запущена!")
+        await bot.send_message(chat_id="@kawaleague", text=f"Игра за столом {table_id} ({', '.join([i.irl_name for i in game.players])}) запущена!")
         
     elif result == "MEMBER NOT FOUND":
         await update.effective_message.reply_text(f"Игра не может быть начата. Не найдены игроки: {', '.join(missed_players)}")
@@ -230,7 +241,11 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         
 async def set_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обновляет статус игры (только для администраторов)."""
-    if len(context.args) != 3:
+    user = update.effective_user
+    assert user
+    assert update.effective_message
+    
+    if not context.args or len(context.args) != 3:
         await update.effective_message.reply_text(
             "Использование: /set_time <стол> <день> <время>\n"
             "День вводить без месяца, только само число.\n"
@@ -239,18 +254,24 @@ async def set_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "15 стол в 17:00 10 числа - /set_time 15 10 17"
             )
         return
+    
     table_id, day, chosen_time = context.args
-    games = db.get_unstarted_games_by_table_id(table_id)
+    table_id = int(table_id)
+    table = db.get_visible_table(table_id)
+    
+    if not table:
+        await update.effective_message.reply_text(f"Стол {table_id} не найден.")
+        logger.info("Table %s not found.", table_id)
+        return
+
+    games = table.unfinished_games
     if not games:
         await update.effective_message.reply_text(f"Нет неначатых игр за столом {table_id}.")
         logger.info("No unstarted games at table %s.", table_id)
         return
-    user = update.effective_user
+    
     player = db.get_player(telegram_id=user.id)
-    game = games[0]
-    p1, p2, p3, p4, game_id = game
-    player_ids = [p1, p2, p3, p4]
-    if player["p_id"] not in player_ids:
+    if player not in table.players:
         await update.effective_message.reply_text(f"Указывать время можно только за своим столом.")
         logger.info(f"{user.name} attempted using set_time with args {[context.args]}. Not found at table")
         return
@@ -280,50 +301,59 @@ async def set_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     db.set_table_time(table_id=table_id, timestamp=int(prospective_start.timestamp()))
     logger.info(f"{user.name} used set_time with args {[context.args]}. Time set: {year}.{month}.{day} {hour}:{minute}")
-    return await update.effective_message.reply_text(f"Время установлено: {prospective_start.strftime('%d.%m %H:%M')}")
+    await update.effective_message.reply_text(f"Время установлено: {prospective_start.strftime('%d.%m %H:%M')}")
+    return
 
 async def timetable_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    
     logger.info("User %s (%s) issued /my_games command.", user.username, user.id)
     if update.effective_message.chat.type != "private":
         await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
         return
     
-    games = db.get_timetable()
-    unknown = set([i["table_id"] for i in games if not i["time"]])
-    games = [i for i in games if i["time"]]
-    games.sort(key = lambda el: el["time"])
+    tables = db.get_unfinished_visible_tables()
+    tables.sort(key = lambda el: el.table_id)
+    unknown_ids = [table.table_id for table in tables if not table.time]
+    known = [table for table in tables if table.time]
+    
     timezone = pytz.timezone("Europe/Moscow")
-    for i in games:
-        i["time"] = datetime.datetime.fromtimestamp(i["time"], tz=timezone)
-    known_str = "\n".join([f"{i['time'].strftime('%d.%m %H:%M')} - стол {i['table_id']} ({', '.join([j['irl_name'] for j in i['players']])})" for i in games])
-    unknown_str = ", ".join(map(str, sorted(unknown)))
+    known_str = "\n".join([
+        f"{datetime.datetime.fromtimestamp(i.time, tz=timezone).strftime('%d.%m %H:%M')} \
+        - стол {i.table_id} ({', '.join([j.irl_name for j in i.players])})" for i in known])
+    unknown_str = ", ".join(map(str, sorted(unknown_ids)))
     ans = known_str
     if unknown_str:
         ans += "\nВремя неизвестно: "+unknown_str
     if ans == "":
         ans = "Игр нет"
-    return await update.effective_message.reply_text(ans)
+    await update.effective_message.reply_text(ans)
+    return
 
 async def update_game_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обновляет статус игры (только для администраторов)."""
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
     
-    if len(context.args) != 2:
+    if not context.args or len(context.args) != 2:
         await update.effective_message.reply_text("Usage: /update_game_status <game_id> <status>")
         return
 
-    game_id = context.args[0]
-    status = context.args[1]
+    game_id = int(context.args[0])
+    status = int(context.args[1])
 
     if status not in ["1", "0"]:
         await update.effective_message.reply_text("Invalid status. Use '1' for started or '0' for not started.")
         return
 
-    success = db.update_game_status(game_id, int(status))
+    success = db.set_game_status(game_id, status)
     if success:
         status_text = "started" if status == "1" else "not started"
         await update.effective_message.reply_text(f"Статус игры с ID {game_id} успешно обновлен на '{status_text}'.")
@@ -335,6 +365,9 @@ async def update_game_status_command(update: Update, context: ContextTypes.DEFAU
 async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Создает резервную копию базы данных (только для администраторов)."""
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
@@ -346,6 +379,9 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def get_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет файл с логами администратору."""
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
@@ -364,62 +400,67 @@ async def get_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def force_ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Админская команда для пометки игрока как готового."""
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
-    if len(context.args) != 1:
+    if not context.args or len(context.args) != 1:
         await update.effective_message.reply_text("Использование: /force_ready <telegram_id>")
         return
 
     telegram_id = int(context.args[0])
-    tenhou_name = db.get_tenhou_name_by_pid(db.get_player_id_by_tg_id(telegram_id))
+    player = db.get_player(telegram_id=telegram_id)
 
-    if not tenhou_name:
+    if not player:
         await update.effective_message.reply_text("Пользователь не зарегистрирован.")
         return
 
-    ready_players.add(tenhou_name)
-    await update.effective_message.reply_text(f"Игрок {tenhou_name} помечен как готов.")
+    ready_players.add(player.p_id)
+    await update.effective_message.reply_text(f"Игрок {player.irl_name} помечен как готовый.")
 
 async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Админская команда для снятия готовности игрока."""
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
-    if len(context.args) != 1:
+    if not context.args or len(context.args) != 1:
         await update.effective_message.reply_text("Использование: /force_unready <telegram_id>")
         return
 
     telegram_id = int(context.args[0])
-    tenhou_name = db.get_tenhou_name_by_pid(db.get_player_id_by_tg_id(telegram_id))
+    player = db.get_player(telegram_id=telegram_id)
 
-    if not tenhou_name:
+    if not player:
         await update.effective_message.reply_text("Пользователь не зарегистрирован.")
         return
 
-    if tenhou_name in ready_players:
-        ready_players.remove(tenhou_name)
-        await update.effective_message.reply_text(f"Игрок {tenhou_name} снят с готовности.")
+    if player.p_id in ready_players:
+        ready_players.remove(player.p_id)
+        await update.effective_message.reply_text(f"Игрок {player.irl_name} снят с готовности.")
     else:
-        await update.effective_message.reply_text(f"Игрок {tenhou_name} не был помечен как готов.")
+        await update.effective_message.reply_text(f"Игрок {player.irl_name} не был помечен как готов.")
 
 async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send the alarm message."""
     job = context.job
     started, total = db.get_games_status()
     now = datetime.datetime.now()
     tommorow:datetime.datetime = now + datetime.timedelta(days=1)
-    games = db.get_timetable()
+    tables = db.get_unfinished_visible_tables()
     started, total = db.get_games_status()
-    games = [i for i in games if i["time"] and i["time"] >= now.timestamp() and i["time"] < tommorow.timestamp()]
+    tables = [i for i in tables if i.time and i.time >= now.timestamp() and i.time < tommorow.timestamp()]
     timezone = pytz.timezone("Europe/Moscow")
-    for i in games:
-        i["players"] = ", ".join([f"<a href=\'tg://user?id={j['telegram_id']}\'>{j['irl_name']}</a>" for j in i["players"]])
-        i["time"] = datetime.datetime.fromtimestamp(i["time"], tz=timezone)
-    games = [f"{i['time'].strftime('%d.%m %H:%M')} - стол {i['table_id']} ({i['players']})" for i in games]
+    games = [f"{datetime.datetime.fromtimestamp(i.time, tz=timezone).strftime('%d.%m %H:%M')}\
+             - стол {i.table_id} \
+             ({", ".join([f"<a href=\'tg://user?id={j.telegram_id}\'>{j.irl_name}</a>" \
+             for j in i.players])})" for i in tables]
     ans = f"Доброе утро, запущено игр: {started}/{total}"
     if games:
         ans += "\nСегодня играют:\n"+"\n".join(games)
@@ -427,26 +468,33 @@ async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    assert user
+    assert update.effective_message
+
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
     now = datetime.datetime.now()
     tommorow:datetime.datetime = now + datetime.timedelta(days=1)
-    games = db.get_timetable()
+    tables = db.get_unfinished_visible_tables()
     started, total = db.get_games_status()
-    games = [i for i in games if i["time"] and i["time"] >= now.timestamp() and i["time"] < tommorow.timestamp()]
+    tables = [i for i in tables if i.time and i.time >= now.timestamp() and i.time < tommorow.timestamp()]
     timezone = pytz.timezone("Europe/Moscow")
-    for i in games:
-        i["players"] = ", ".join([f"<a href=\'tg://user?id={j['telegram_id']}\'>{j['irl_name']}</a>" for j in i["players"]])
-        i["time"] = datetime.datetime.fromtimestamp(i["time"], tz=timezone)
-    games = [f"{i['time'].strftime('%d.%m %H:%M')} - стол {i['table_id']} ({i['players']})" for i in games]
+    games = [f"{datetime.datetime.fromtimestamp(i.time, tz=timezone).strftime('%d.%m %H:%M')}\
+             - стол {i.table_id} \
+             ({", ".join([f"<a href=\'tg://user?id={j.telegram_id}\'>{j.irl_name}</a>" \
+             for j in i.players])})" for i in tables]
     ans = f"Доброе утро, запущено игр: {started}/{total}"
     if games:
         ans += "\nСегодня играют:\n"+"\n".join(games)
-    await update.effective_message.reply_text(ans, parse_mode=ParseMode.HTML)
+    await context.bot.send_message(chat_id="@kawaleague", text=ans, parse_mode=ParseMode.HTML)
 
 async def start_status_message_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    assert context.job_queue
+
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
@@ -454,61 +502,77 @@ async def start_status_message_command(update: Update, context: ContextTypes.DEF
     chat_id = update.effective_message.chat_id
     tz = pytz.timezone("Europe/Moscow")
     callback_time = datetime.time(hour=10, minute=0, tzinfo=tz)
-    context.job_queue.run_daily(send_game_status_message, time=callback_time, chat_id="@kawaleague", name=str(chat_id))
+    context.job_queue.run_daily(send_game_status_message, time=callback_time, chat_id="@kawaleague", name=str(chat_id)) # pyright: ignore[reportArgumentType]
     text = "Timer successfully set!"
     await update.effective_message.reply_text(text)
 
-async def get_player_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def get_player_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Получает игры игрока по его telegram_name (админская команда).
-    Показывает game_id и started для каждой игры.
+    Получает информацию об игроке
     """
     user = update.effective_user
-    if not is_admin(user.id):
-        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
-        return
-
+    assert user
+    assert update.effective_message
+    
     if update.effective_message.chat.type != "private":
         await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
         return
     
-    if len(context.args) != 1:
-        await update.effective_message.reply_text("Использование: /get_player_games <telegram_name>")
+    if not context.args or len(context.args) != 1:
+        await update.effective_message.reply_text("Использование: /get_player_info <telegram_id>")
         return
 
-    telegram_name = context.args[0]
+    telegram_id = int(context.args[0])
     
-    if telegram_name[0] == "@":
-        telegram_name = telegram_name[1:]
+    player = db.get_player(telegram_id=telegram_id)
+
+    if not player:
+        await update.effective_message.reply_text("Пользователь не зарегистрирован.")
+        return
+
+    message = f"{player.p_id=}\n"\
+              f"{player.telegram_id=}\n"\
+              f"{player.telegram_name=}\n"\
+              f"{player.tenhou_name=}\n"\
+              f"{player.irl_name=}\n\n"
+
+    for table in player.visible_tables:
+        message += f"Стол {table.table_id}\n"
+        for i in table.players:
+            message += f"{i.p_id}: {i.irl_name}"
+        message += f"Осталось сыграть: {len(table.unfinished_games)} из {len(table.games)} игр\n\n"
     
-    # Получаем ID игрока по telegram_name
-    p_id = db.get_player_id_by_telegram_name(telegram_name)
-    if not p_id:
-        await update.effective_message.reply_text(f"Игрок с именем @{telegram_name} не найден.")
-        return
-
-    # Получаем все игры игрока (не только текущей стадии)
-    games = db.get_all_player_games(p_id)
-    if not games:
-        await update.effective_message.reply_text(f"У игрока @{telegram_name} нет игр.")
-        return
-
-    message = f"Игры игрока @{telegram_name}:\n"
-    for game in games:
-        game_id, table_id, p1, p2, p3, p4, started, stage = game
-        status = "🟢 начата" if started else "🔴 не начата"
-        message += (
-            f"Игра ID: {game_id}, Стол: {table_id}, Стадия: {stage}\n"
-            f"Статус: {status}\n"
-            f"Игроки: "
-            f"@{db.get_telegram_name_by_pid(p1)} ({db.get_tenhou_name_by_pid(p1)}), "
-            f"@{db.get_telegram_name_by_pid(p2)} ({db.get_tenhou_name_by_pid(p2)}), "
-            f"@{db.get_telegram_name_by_pid(p3)} ({db.get_tenhou_name_by_pid(p3)}), "
-            f"@{db.get_telegram_name_by_pid(p4)} ({db.get_tenhou_name_by_pid(p4)})\n\n"
-        )
-
+    if player.invisible_tables:
+        ids = [i.table_id for i in player.invisible_tables]
+        message += f"Скрытые столы: {ids}\n\n"
     await update.effective_message.reply_text(message)
-    logger.info("Admin %s requested games for player %s", user.username, telegram_name)
+    logger.info("Admin %s requested info for player %s", user.full_name, player.irl_name)
+    
+async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Получает информацию об игроке
+    """
+    user = update.effective_user
+    assert user
+    assert update.effective_message
+    
+    if update.effective_message.chat.type != "private":
+        await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
+        return
+    
+    if not context.args or len(context.args) != 1:
+        await update.effective_message.reply_text("Использование: /get_table_info <telegram_id>")
+        return
+
+    table_id = int(context.args[0])
+    table = db.get_table(table_id)
+    if not table:
+        await update.effective_message.reply_text("Стол не найден.")
+        return
+    if not table.visible and is_admin(user.id):
+        await update.effective_message.reply_text("Стол скрыт.")
+        return
+    
         
 # Глобальные переменные для режима ожидания
 awaiting_db_upload = False
@@ -517,6 +581,9 @@ awaiting_settings_upload = False
 async def get_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет текущую базу данных администратору."""
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
@@ -530,6 +597,8 @@ async def set_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     global awaiting_db_upload
 
     user = update.effective_user
+    assert user
+    assert update.effective_message
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
@@ -541,6 +610,8 @@ async def set_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def get_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет текущий файл настроек администратору."""
     user = update.effective_user
+    assert user
+    assert update.effective_message
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
@@ -554,6 +625,8 @@ async def set_settings_command(update: Update, context: ContextTypes.DEFAULT_TYP
     global awaiting_settings_upload
 
     user = update.effective_user
+    assert user
+    assert update.effective_message
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
@@ -567,6 +640,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     global awaiting_db_upload, awaiting_settings_upload
 
     user = update.effective_user
+    assert user
+    assert update.effective_message
+    assert update.effective_message.document
+    
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
@@ -608,7 +685,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 def main() -> None:
     """Запускает бота."""
-    with open("token.txt", "r") as file:
+    with open("token_alt.txt", "r") as file:
         token = file.read().strip()
     
     application = Application.builder().token(token).write_timeout(30).read_timeout(30).connect_timeout(30).build()
@@ -628,7 +705,7 @@ def main() -> None:
     application.add_handler(CommandHandler("get_logs", get_logs_command))
     application.add_handler(CommandHandler("force_ready", force_ready_command))
     application.add_handler(CommandHandler("force_unready", force_unready_command))
-    application.add_handler(CommandHandler("get_player_games", get_player_games_command))
+    application.add_handler(CommandHandler("get_player_info", get_player_info_command))
     application.add_handler(CommandHandler("start_status_message", start_status_message_command))
     application.add_handler(CommandHandler("set_time", set_time_command))
     application.add_handler(CommandHandler("timetable", timetable_command))
