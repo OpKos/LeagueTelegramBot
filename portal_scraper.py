@@ -1,9 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
 import json
+import configparser
 
-# URL страницы
-url = "https://mahjong.click/ru/tournaments/riichi/kawa-league-1-season/announcement/"
+config = configparser.ConfigParser()
+config.read("config.ini")
+url = config.get("Settings", "url")
 ena = 1
 
 # Отправляем запрос на страницу
