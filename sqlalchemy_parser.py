@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, select, ForeignKey
+from sqlalchemy import create_engine, select, ForeignKey, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session, relationship, sessionmaker
 import logging, os, shutil
 from datetime import datetime
@@ -179,6 +179,44 @@ class SqliteParser:
     def get_unfinished_visible_tables(self):
         tables = self.session.query(Table).all()
         return [table for table in tables if table.unfinished_games and table.visible]
+
+    def set_next_table_ready(self, p_id: int, ready: bool = True):
+        """Помечает игрока как готового к следующему столу"""
+        player = self.session.get(Player, p_id)
+        if player:
+            player.next_table_ready = ready
+            self.session.commit()
+            return True
+        return False
+
+    def check_table_reveal_ready(self, table_id: int):
+        """Проверяет, готов ли стол к раскрытию"""
+        table = self.session.get(Table, table_id)
+        
+        if not table or table.visible:
+            return False
+            
+        return all(p.player.next_table_ready for p in table.players_seats)
+
+    def reveal_table(self, table_id: int):
+        """Раскрывает стол и снимает пометки о готовности"""
+        table = self.session.get(Table, table_id)
+        
+        if not table or table.visible:
+            return False
+
+        # Получаем максимальный текущий порядок раскрытия
+        max_order = self.session.query(func.max(Table.reveal_order)).scalar() or 0
+        
+        # Снимаем пометки о готовности
+        for tp in table.players_seats:
+            tp.player.next_table_ready = False
+            
+        # Раскрываем стол с новым порядком
+        table.visible = True
+        table.reveal_order = max_order + 1
+        self.session.commit()
+        return True
 
     def backup_database(self):
         try:
