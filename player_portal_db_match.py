@@ -18,5 +18,5 @@ for player in data:
         db.fill_player_data(player.p_id, name, include)
         print(f"player updated in database: {player}")
     else:
-        print(f"player not found in database: {player}")
+        print(f"player not found in database: {name}")
     
