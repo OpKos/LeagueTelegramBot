@@ -6,11 +6,11 @@ import os
 from logging.handlers import RotatingFileHandler
 
 import pytz
-from telegram import Update, Message, InlineKeyboardButton, User
+from telegram import Update, Message, InlineKeyboardButton, User, Bot
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from sqlalchemy_parser import SqliteParser
+from sqlalchemy_parser import SqliteParser, Player, Table
 from tenhou_parser import TenhouClient
 
 # Настройка логирования
@@ -210,7 +210,7 @@ async def start_game_with_players(context: ContextTypes.DEFAULT_TYPE, game_id: i
         db.set_game_status(game.game_id, 1)
         # Отправляем уведомление в группу
         await context.bot.send_message(
-            chat_id="@kawaleague",
+            chat_id=666249060,
             text=f"Игра за столом {game.table.table_id} ({', '.join(p.irl_name for p in game.players)}) запущена!"
         )
         
@@ -296,6 +296,57 @@ async def start_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.effective_message.set_reaction("👍")
     elif message:
         await update.effective_message.reply_text(message)
+        
+async def next_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Помечает игрока как готового к следующему столу"""
+    user = update.effective_user
+    if not user or not update.effective_message:
+        return
+
+    player = db.get_player(telegram_id=user.id)
+    if not player:
+        await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
+        return
+
+    # Помечаем игрока как готового
+    if not db.set_next_table_ready(player.p_id):
+        await update.effective_message.reply_text("Ошибка обновления статуса.")
+        return
+
+    await update.effective_message.set_reaction("👍")
+
+    # Ищем стол для раскрытия
+    tables_to_check = [t for t in player.all_tables if not t.visible]
+    
+    for table in tables_to_check:
+        if db.check_table_reveal_ready(table.table_id):
+            if db.reveal_table(table.table_id):
+                await notify_table_revealed(context.bot, table)
+            break
+
+async def notify_table_revealed(bot: Bot, table: Table, additional_info=""):
+    """Уведомляет о раскрытии стола с порядком"""
+    player_names = [p.irl_name for p in table.players]
+    message = (
+        f"Стол {table.table_id} раскрыт!\n"
+        f"{additional_info}\n"
+        f"Игроки: {', '.join(player_names)}\n"
+        f"Используйте /my_games для просмотра"
+    )
+    
+    await bot.send_message(chat_id=666249060, text=message)
+    
+    # Персональные уведомления
+    for p in table.players:
+        if p.telegram_id:
+            continue #DEBUG
+            try:
+                await bot.send_message(
+                    chat_id=p.telegram_id,
+                    text=f"Ваш стол {table.table_id} раскрыт!"
+                )
+            except Exception as e:
+                logger.error(f"Ошибка уведомления {p.irl_name}: {e}")
         
 async def set_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обновляет статус игры (только для администраторов)."""
@@ -505,6 +556,101 @@ async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TY
         await update.effective_message.reply_text(f"Игрок {player.irl_name} снят с готовности.")
     else:
         await update.effective_message.reply_text(f"Игрок {player.irl_name} не был помечен как готов.")
+        
+async def unnext_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Снимает готовность к следующему столу"""
+    user = update.effective_user
+    assert user
+    assert update.effective_message
+    
+    if not user or not update.effective_message:
+        return
+
+    player = db.get_player(telegram_id=user.id)
+    if not player:
+        await update.effective_message.reply_text("Вы не зарегистрированы.")
+        return
+
+    if db.set_next_table_ready(player.p_id, False):
+        await update.effective_message.set_reaction("👍")
+    else:
+        await update.effective_message.reply_text("Ошибка обновления статуса.")
+
+async def force_reveal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Админская команда раскрытия стола через стандартный метод"""
+    user = update.effective_user
+    assert user
+    assert update.effective_message
+    
+    if not is_admin(user.id):
+        await update.effective_message.reply_text("Только для админов")
+        return
+
+    if not context.args or len(context.args) != 1:
+        await update.effective_message.reply_text("Использование: /force_reveal <table_id>")
+        return
+
+    try:
+        table_id = int(context.args[0])
+    except ValueError:
+        await update.effective_message.reply_text("ID стола должен быть числом")
+        return
+
+    if db.reveal_table(table_id):
+        table = db.get_table(table_id)
+        assert table
+        await notify_table_revealed(context.bot, table, "Админ раскрыл стол")
+        await update.effective_message.reply_text(f"Стол {table_id} раскрыт")
+    else:
+        await update.effective_message.reply_text("Ошибка раскрытия стола")
+
+async def force_next_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Админская команда установки готовности через стандартный метод"""
+    user = update.effective_user
+    assert user
+    assert update.effective_message
+    
+    if not is_admin(user.id):
+        await update.effective_message.reply_text("Только для админов")
+        return
+
+    if not context.args or len(context.args) != 1:
+        await update.effective_message.reply_text("Использование: /force_next <telegram_name>")
+        return
+
+    player = db.get_player(telegram_name=context.args[0])
+    if not player:
+        await update.effective_message.reply_text("Игрок не найден")
+        return
+
+    if db.set_next_table_ready(player.p_id, True):
+        await update.effective_message.reply_text(f"Игрок @{context.args[0]} готов к следующему столу")
+    else:
+        await update.effective_message.reply_text("Ошибка обновления статуса")
+
+async def force_unnext_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Админская команда снятия готовности через стандартный метод"""
+    user = update.effective_user
+    assert user
+    assert update.effective_message
+    
+    if not is_admin(user.id):
+        await update.effective_message.reply_text("Только для админов")
+        return
+
+    if not context.args or len(context.args) != 1:
+        await update.effective_message.reply_text("Использование: /force_unnext <telegram_name>")
+        return
+
+    player = db.get_player(telegram_name=context.args[0])
+    if not player:
+        await update.effective_message.reply_text("Игрок не найден")
+        return
+
+    if db.set_next_table_ready(player.p_id, False):
+        await update.effective_message.reply_text(f"Снята готовность у @{context.args[0]}")
+    else:
+        await update.effective_message.reply_text("Ошибка обновления статуса")
 
 async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
     started, total = db.get_games_status()
@@ -772,6 +918,8 @@ def main() -> None:
     application.add_handler(CommandHandler("unready", unready_command))
     application.add_handler(CommandHandler("start_table", start_table_command))
     application.add_handler(CommandHandler("start_game", start_game_command))
+    application.add_handler(CommandHandler("next_table", next_table_command))
+    application.add_handler(CommandHandler("unnext_table", unnext_table_command))
     application.add_handler(CommandHandler("update_game_status", update_game_status_command))
     application.add_handler(CommandHandler("backup", backup_command))
     application.add_handler(CommandHandler("get_db", get_db_command))
@@ -782,6 +930,9 @@ def main() -> None:
     application.add_handler(CommandHandler("get_logs", get_logs_command))
     application.add_handler(CommandHandler("force_ready", force_ready_command))
     application.add_handler(CommandHandler("force_unready", force_unready_command))
+    application.add_handler(CommandHandler("force_reveal", force_reveal_command))
+    application.add_handler(CommandHandler("force_next", force_next_command))
+    application.add_handler(CommandHandler("force_unnext", force_unnext_command))
     application.add_handler(CommandHandler("player_info", get_player_info_command))
     application.add_handler(CommandHandler("table_info", get_table_info_command))
     application.add_handler(CommandHandler("start_status_message", start_status_message_command))
