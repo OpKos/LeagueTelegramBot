@@ -1,58 +1,75 @@
 from PIL import Image, ImageDraw, ImageFont
-from sqlite_parser import SqliteParser
+from PIL.Image import Resampling
+from sqlalchemy_parser import SqliteParser, Table
 import configparser
 
 config = configparser.ConfigParser()
 config.read("config.ini")
 db_path = config.get("Settings", "database")
-database = SqliteParser(db_path)
-stage = config.get("Settings", "stage")
+db = SqliteParser(db_path)
 
-games = database.get_games(stage=stage)
-seen_table_ids = set()
-games2 = []
-for i in games:
-    if i['table'] in seen_table_ids:
-        continue
-    seen_table_ids.add(i['table'])
-    players = []
-    for j in i['players']:
-        name = database.get_irl_name_by_pid(j)
-        players.append(name)
-    i["players"] = players
-    games2.append(i)
-games = games2
-
-n = len(games)
-columns = 7
-rows = (n+columns-1) // columns
-cell_h = 50
-cell_w = 330
-row_h = 5*cell_h
-column_w = cell_w
-gap = 25
-width = (column_w+gap)*columns+gap
-height = (row_h+gap)*rows+gap
+REVEAL_START = 1
+REVEAL_END = 2
 
 name_font = ImageFont.truetype(font="/home/konstantin/.local/share/fonts/indestructible type*/TrueType/Jost/Jost_Regular.ttf", size=25)
 table_font = ImageFont.truetype(font="/home/konstantin/.local/share/fonts/indestructible type*/TrueType/Jost/Jost_Regular.ttf", size=25)
 table_font.set_variation_by_name('Bold')
 
-bg_color = (130,166,221)
-yellow = (247, 241, 148)
+bg_color = (255, 255, 255)
+kawa_yellow = (244, 169, 61)
+kawa_blue = (63, 99, 155)
 
+n=REVEAL_END-REVEAL_START+1
+row_h = 35
+block_w = 300
+gap = 10
+inter_gap = 16
+grid_w = 1
+grid_h = (n+grid_w-1)//grid_w
+width = grid_w * (block_w+inter_gap)+400
+height = n*400
 image = Image.new(mode="RGBA", size=(width,height), color=bg_color)
 d = ImageDraw.Draw(image)
+tables = [db.get_table_by_reveal_order(order) for order in range(REVEAL_START, REVEAL_END+1)]
+tables.sort(key=lambda el: (len(el.players), el.table_id)) # pyright: ignore[reportOptionalMemberAccess]
 
-for i in range(n):
-    x = gap+(i%columns)*(gap+column_w)
-    y = gap+(i//columns)*(gap+row_h)
-    d.rectangle(xy=(x,y,x+column_w,y+row_h), fill='white', outline='black')
-    d.rectangle(xy=(x,y,x+cell_w,y+cell_h), fill=yellow, outline='black')
-    d.text(xy=(x+column_w/2, y+cell_h/2), text=f"Стол {games[i]['table']}", font=table_font, anchor="mm", fill='black')
-    players = games[i]['players']
-    for j in range(4):
-        d.text(xy=(x+25, y+cell_h*(j+1.5)), text=players[j], font=name_font, anchor="lm", fill='black')
-        
+top = row_h+10
+center = inter_gap+block_w//2+100
+for i, table in enumerate(tables):
+    assert table
+    grid_x = i//grid_h
+    grid_y = i-grid_x*grid_h
+    if grid_y == 0 and i > 0:
+        top = row_h+10
+        center += block_w+inter_gap+30
+    table_h = row_h * (len(table.players)+1) + gap*2
+    if grid_x == grid_w-1 and grid_y == 0:
+        top_wave = Image.open("top_wave.png").resize((120,120), resample=Resampling.LANCZOS)
+        image.paste(im=top_wave, box=(center+block_w//2-10-38, top-40), mask=top_wave)
+        true_w = center+block_w//2+100
+    d.rounded_rectangle(xy=(center-block_w/2, top, center+block_w/2, top+table_h), outline=kawa_blue, width=4, radius=14)
+    top += gap
+    d.text(anchor="mm", xy=(center, top+row_h/2), text=f"Стол {table.table_id}", fill=kawa_yellow, font=table_font)
+    top += row_h
+    for player in table.players:
+        d.text(anchor="mm", xy=(center, top+row_h/2), text=f"{player.irl_name}", fill=kawa_blue, font=name_font)
+        top+=row_h
+    top += inter_gap+gap
+    if grid_y == grid_h-1 and grid_x == 0:
+        bot_wave = Image.open("bot_wave.png").resize((154,119), resample=Resampling.LANCZOS)
+        image.paste(im=bot_wave, box=(center-block_w//2-144+38, top-76-inter_gap), mask=bot_wave)
+        true_h = top+row_h
+    if grid_y < grid_h-1 and i < len(tables)-1:
+        for x in range(-1, 2):
+            d.line(xy=(center-block_w/2+38+8*x, top-inter_gap-2, center-block_w/2+38+8*x, top+2), fill=kawa_blue, width=4)
+        for x in range(-1, 2):
+            d.line(xy=(center+block_w/2-38+8*x, top-inter_gap-2, center+block_w/2-38+8*x, top+2), fill=kawa_blue, width=4)
+    
+
+
+    
+image = image.crop((0, 0, true_w, true_h))
+
 image.save("seating.png")
-# image.show()
+image.show()
+
