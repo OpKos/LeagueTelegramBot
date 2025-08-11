@@ -99,11 +99,11 @@ async def my_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Получаем игры только для текущей стадии турнира
     tables = player.visible_tables
     if not tables:
-        await update.effective_message.reply_text("У вас нет активных игр на текущей стадии турнира.")
+        await update.effective_message.reply_text("У вас нет активных игр.")
         logger.info("User %s (%s) has no active games on the current stage.", user.username, user.id)
         return
     
-    message = "Ваши игры на текущей стадии турнира:\n"
+    message = "Ваши игры:\n"
     for table in tables:
         message += f"Стол {table.table_id}:\n"
         for player in table.players:
@@ -210,7 +210,7 @@ async def start_game_with_players(context: ContextTypes.DEFAULT_TYPE, game_id: i
         db.set_game_status(game.game_id, 1)
         # Отправляем уведомление в группу
         await context.bot.send_message(
-            chat_id=666249060,
+            chat_id="@kawaleague",
             text=f"Игра за столом {game.table.table_id} ({', '.join(p.irl_name for p in game.players)}) запущена!"
         )
         
@@ -328,22 +328,20 @@ async def notify_table_revealed(bot: Bot, table: Table, additional_info=""):
     """Уведомляет о раскрытии стола с порядком"""
     player_names = [p.irl_name for p in table.players]
     message = (
-        f"Стол {table.table_id} раскрыт!\n"
-        f"{additional_info}\n"
+        f"Новый стол {table.table_id} стол!\n"
         f"Игроки: {', '.join(player_names)}\n"
         f"Используйте /my_games для просмотра"
     )
     
-    await bot.send_message(chat_id=666249060, text=message)
+    await bot.send_message(chat_id="@kawaleague", text=message)
     
     # Персональные уведомления
     for p in table.players:
         if p.telegram_id:
-            continue #DEBUG
             try:
                 await bot.send_message(
                     chat_id=p.telegram_id,
-                    text=f"Ваш стол {table.table_id} раскрыт!"
+                    text=f"Новый стол: {table.table_id}!"
                 )
             except Exception as e:
                 logger.error(f"Ошибка уведомления {p.irl_name}: {e}")
@@ -666,7 +664,7 @@ async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
     ans = f"Доброе утро, запущено игр: {started}/{total}"
     if games:
         ans += "\nСегодня играют:\n"+"\n".join(games)
-    await context.bot.send_message(chat_id=666249060, text=ans, parse_mode=ParseMode.HTML)
+    await context.bot.send_message(chat_id="@kawaleague", text=ans, parse_mode=ParseMode.HTML)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
@@ -703,10 +701,6 @@ async def get_player_info_command(update: Update, context: ContextTypes.DEFAULT_
     user = update.effective_user
     assert user
     assert update.effective_message
-    
-    if update.effective_message.chat.type != "private":
-        await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
-        return
     
     if not context.args or len(context.args) != 1:
         await update.effective_message.reply_text("Использование: /player_info <telegram_id>")
@@ -745,10 +739,6 @@ async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_T
     user = update.effective_user
     assert user
     assert update.effective_message
-    
-    if update.effective_message.chat.type != "private":
-        await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
-        return
     
     if not context.args or len(context.args) != 1:
         await update.effective_message.reply_text("Использование: /table_info <table_id>")

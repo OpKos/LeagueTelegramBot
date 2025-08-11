@@ -217,6 +217,10 @@ class SqliteParser:
         table.reveal_order = max_order + 1
         self.session.commit()
         return True
+    
+    def get_table_by_reveal_order(self, reveal_order: int):
+        query = self.session.query(Table).filter(Table.reveal_order==reveal_order)
+        return query.first()
 
     def backup_database(self):
         try:
