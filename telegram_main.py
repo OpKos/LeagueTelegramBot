@@ -6,11 +6,11 @@ import os
 from logging.handlers import RotatingFileHandler
 
 import pytz
-from telegram import Update, Message, InlineKeyboardButton, User, Bot
+from telegram import Update, Bot
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from sqlalchemy_parser import SqliteParser, Player, Table
+from sqlalchemy_parser import SqliteParser, Table
 from tenhou_parser import TenhouClient
 
 # Настройка логирования
@@ -411,6 +411,37 @@ async def set_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.effective_message.reply_text(f"Время установлено: {prospective_start.strftime('%d.%m %H:%M')}")
     return
 
+async def remove_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обновляет статус игры (только для администраторов)."""
+    user = update.effective_user
+    assert user
+    assert update.effective_message
+    
+    if not context.args or len(context.args) != 1:
+        await update.effective_message.reply_text(
+            "Использование: /remove_time <стол>"
+            )
+        return
+    
+    table_id = context.args[0]
+    table_id = int(table_id)
+    table = db.get_visible_table(table_id)
+    
+    if not table:
+        await update.effective_message.reply_text(f"Стол {table_id} не найден.")
+        logger.info("Table %s not found.", table_id)
+        return
+    
+    player = db.get_player(telegram_id=user.id)
+    if player not in table.players and not is_admin(user.id):
+        await update.effective_message.reply_text(f"Удалять время можно только за своим столом.")
+        logger.info(f"{user.name} attempted using remove_time with args {[context.args]}. Not found at table")
+        return
+    db.set_table_time(table_id=table_id, timestamp=0)
+    logger.info(f"{user.name} used remove_time with args {[context.args]}.")
+    await update.effective_message.reply_text(f"Время удалено.")
+    return
+
 async def timetable_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     assert user
@@ -425,18 +456,15 @@ async def timetable_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     tables.sort(key = lambda el: el.table_id)
     unknown_ids = [table.table_id for table in tables if not table.time]
     known = [table for table in tables if table.time]
-    
-    timezone = pytz.timezone("Europe/Moscow")
-    known_str = "\n".join([
-        f"{datetime.datetime.fromtimestamp(i.time, tz=timezone).strftime('%d.%m %H:%M')} \
-        - стол {i.table_id} ({', '.join([j.irl_name for j in i.players])})" for i in known])
+    known.sort(key=lambda el: el.time)
+    known_str = "".join([table_string(i) for i in known])
     unknown_str = ", ".join(map(str, sorted(unknown_ids)))
     ans = known_str
     if unknown_str:
-        ans += "\nВремя неизвестно: "+unknown_str
+        ans += "Время неизвестно: "+unknown_str
     if ans == "":
         ans = "Игр нет"
-    await update.effective_message.reply_text(ans)
+    await update.effective_message.reply_text(ans, parse_mode=ParseMode.HTML)
     return
 
 async def update_game_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -650,6 +678,25 @@ async def force_unnext_command(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         await update.effective_message.reply_text("Ошибка обновления статуса")
 
+def timestring_from_timestamp(timestamp: int) -> str:
+    timezone = pytz.timezone("Europe/Moscow")
+    return datetime.datetime.fromtimestamp(timestamp, tz=timezone).strftime('%d.%m %H:%M')
+
+def table_string(table: Table, mention: bool = False) -> str:
+    ans = timestring_from_timestamp(table.time)+" - "+f"Стол {table.table_id}:\n"
+    for i, player in enumerate(table.players):
+        if mention:
+            ans += player.clean_mention()
+        else:
+            ans += player.irl_name
+        if i%2 == 0:
+            ans += ", "
+        elif i < len(table.players)-1:
+            ans += ",\n"
+        else:
+            ans += ".\n\n"
+    return ans
+
 async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
     started, total = db.get_games_status()
     now = datetime.datetime.now()
@@ -657,13 +704,11 @@ async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
     tables = db.get_unfinished_visible_tables()
     started, total = db.get_games_status()
     tables = [i for i in tables if i.time and i.time >= now.timestamp() and i.time < tommorow.timestamp()]
-    timezone = pytz.timezone("Europe/Moscow")
-    games = [f"{datetime.datetime.fromtimestamp(table.time, tz=timezone).strftime('%d.%m %H:%M')}"\
-             f"- стол {table.table_id}" \
-             f"({", ".join([player.clean_mention() for player in table.players])})" for table in tables]
+    tables.sort(key=lambda el: el.time)
+    games = [table_string(table, mention=True) for table in tables]
     ans = f"Доброе утро, запущено игр: {started}/{total}"
     if games:
-        ans += "\nСегодня играют:\n"+"\n".join(games)
+        ans += "\nСегодня играют:\n\n"+"".join(games)
     await context.bot.send_message(chat_id="@kawaleague", text=ans, parse_mode=ParseMode.HTML)
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -702,6 +747,10 @@ async def get_player_info_command(update: Update, context: ContextTypes.DEFAULT_
     assert user
     assert update.effective_message
     
+    if update.effective_message.chat.type != "private":
+        await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
+        return
+    
     if not context.args or len(context.args) != 1:
         await update.effective_message.reply_text("Использование: /player_info <telegram_id>")
         return
@@ -723,10 +772,10 @@ async def get_player_info_command(update: Update, context: ContextTypes.DEFAULT_
     for table in player.visible_tables:
         message += f"Стол {table.table_id}\n"
         for i in table.players:
-            message += f"{i.p_id}: {i.irl_name}\n"
-        message += f"Осталось сыграть: {len(table.unfinished_games)} из {len(table.games)} игр\n\n"
+            message += f"{i.irl_name} ({i.dirty_mention()})\n"
+        message += f"Сыграно: {len(table.games)-len(table.unfinished_games)} из {len(table.games)} игр\n\n"
     
-    if player.invisible_tables:
+    if player.invisible_tables and is_admin(user.id):
         ids = [i.table_id for i in player.invisible_tables]
         message += f"Скрытые столы: {ids}\n\n"
     await update.effective_message.reply_text(message)
@@ -739,6 +788,10 @@ async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_T
     user = update.effective_user
     assert user
     assert update.effective_message
+    
+    if update.effective_message.chat.type != "private":
+        await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
+        return
     
     if not context.args or len(context.args) != 1:
         await update.effective_message.reply_text("Использование: /table_info <table_id>")
@@ -754,10 +807,13 @@ async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     message = f"Стол {table.table_id}\n"\
-              f"{'Стол скрыт 🔒\n' if not table.visible else ''}"
+              f"{'Стол скрыт 🔒' if not table.visible else ''}\n"
     for i in table.players:
-        message += f"{i.p_id}: {i.irl_name}\n"
-    message += f"Осталось сыграть: {len(table.unfinished_games)} из {len(table.games)} игр\n\n"
+        message += f"{i.irl_name} ({i.dirty_mention()})\n"
+    message += f"Осталось сыграть: {len(table.unfinished_games)} из {len(table.games)} игр\n"
+    if table.time:
+        message += f"Время: {timestring_from_timestamp(table.time)}"
+    message += "\n\n"
     
     games = table.games
     for game in games:
@@ -896,7 +952,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 def main() -> None:
     """Запускает бота."""
-    with open("token_alt.txt", "r") as file:
+    with open("token.txt", "r") as file:
         token = file.read().strip()
     
     application = Application.builder().token(token).write_timeout(30).read_timeout(30).connect_timeout(30).build()
@@ -927,6 +983,7 @@ def main() -> None:
     application.add_handler(CommandHandler("table_info", get_table_info_command))
     application.add_handler(CommandHandler("start_status_message", start_status_message_command))
     application.add_handler(CommandHandler("set_time", set_time_command))
+    application.add_handler(CommandHandler("remove_time", remove_time_command))
     application.add_handler(CommandHandler("timetable", timetable_command))
     application.add_handler(CommandHandler("status", status_command))
     
