@@ -109,6 +109,7 @@ class SqliteParser:
             enable_seating=False
         )
         self.session.add(player)
+        self.backup_database()
         self.session.commit()
 
     def fill_player_data(self, p_id: int, irl_name: str, include_status: int):
@@ -116,12 +117,14 @@ class SqliteParser:
         assert player
         player.irl_name = irl_name
         player.enable_seating = bool(include_status)
+        self.backup_database()
         self.session.commit()
                 
     def update_tenhou_nick(self, p_id: int, tenhou_name: str):
         player = self.session.get(Player, p_id)
         assert player
         player.tenhou_name = tenhou_name
+        self.backup_database()
         self.session.commit()
             
     def get_player(self, p_id=None, telegram_id=None, telegram_name=None, tenhou_name=None):
@@ -143,6 +146,7 @@ class SqliteParser:
         game = self.session.get(Game, game_id)
         assert game
         game.started = status
+        self.backup_database()
         self.session.commit()
     
     def get_games_status(self):
@@ -167,6 +171,7 @@ class SqliteParser:
         if table is None:
             return False
         table.time = timestamp
+        self.backup_database()
         self.session.commit()
         return True
 
@@ -185,6 +190,7 @@ class SqliteParser:
         player = self.session.get(Player, p_id)
         if player:
             player.next_table_ready = ready
+            self.backup_database()
             self.session.commit()
             return True
         return False
@@ -215,6 +221,7 @@ class SqliteParser:
         # Раскрываем стол с новым порядком
         table.visible = True
         table.reveal_order = max_order + 1
+        self.backup_database()
         self.session.commit()
         return True
     
