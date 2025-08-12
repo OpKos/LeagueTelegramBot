@@ -79,6 +79,7 @@ def main(db_path):
             idxs = [i, (i - 7) % M, (i - 14) % M, (i - 23) % M]
             tables.append([remaining[j] for j in idxs])
 
+    random.shuffle(tables)
     # Запись в БД
     for table_players in tables:
         table = Table(visible=False)
