@@ -826,6 +826,18 @@ async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_T
     await update.effective_message.reply_text(message)
     logger.info("Person %s requested info for table %s", user.full_name, table.table_id)
         
+async def lobby_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  
+    assert update.effective_message
+    lobby = config.get("Settings", "lobby")
+    await update.effective_message.reply_text(f"https://tenhou.net/3/?{lobby[:9]}")
+    return
+
+async def pantheon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:  
+    assert update.effective_message
+    pantheon = config.get("Settings", "pantheon")
+    await update.effective_message.reply_text(pantheon)
+    return
+
 # Глобальные переменные для режима ожидания
 awaiting_db_upload = False
 awaiting_settings_upload = False
@@ -986,6 +998,9 @@ def main() -> None:
     application.add_handler(CommandHandler("remove_time", remove_time_command))
     application.add_handler(CommandHandler("timetable", timetable_command))
     application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("lobby", lobby_command))
+    application.add_handler(CommandHandler("pantheon", pantheon_command))
+    
     
     
     application.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, handle_document))
