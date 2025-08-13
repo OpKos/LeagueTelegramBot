@@ -208,10 +208,12 @@ async def start_game_with_players(context: ContextTypes.DEFAULT_TYPE, game_id: i
     
     if success:
         db.set_game_status(game.game_id, 1)
+        seat_winds_names = ["東", "南", "西", "北"]
         # Отправляем уведомление в группу
         await context.bot.send_message(
             chat_id="@kawaleague",
-            text=f"Игра за столом {game.table.table_id} ({', '.join(p.irl_name for p in game.players)}) запущена!"
+            text=f"Игра за столом {game.table.table_id} запущена:\n"
+            f"{'\n'.join(seat_winds_names[i] + ' ' + p.irl_name + ' (' + p.tenhou_name + ')' for i, p in enumerate(game.players))}"
         )
         
         logger.info(f"Игра за столом {game.table.table_id} успешно запущена")
@@ -452,12 +454,14 @@ async def timetable_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
         return
     
+    now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
+    cutoff = now - datetime.timedelta(hours=3)
     tables = db.get_unfinished_visible_tables()
     tables.sort(key = lambda el: el.table_id)
-    unknown_ids = [table.table_id for table in tables if not table.time]
-    known = [table for table in tables if table.time]
+    unknown_ids = [table.table_id for table in tables if not table.time or table.time < cutoff.timestamp()]
+    known = [table for table in tables if table.time and table.time >= cutoff.timestamp()]
     known.sort(key=lambda el: el.time)
-    known_str = "".join([table_string(i) for i in known])
+    known_str = "".join([table_string(i, explicit=True) for i in known])
     unknown_str = ", ".join(map(str, sorted(unknown_ids)))
     ans = known_str
     if unknown_str:
@@ -543,11 +547,13 @@ async def force_ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     if not context.args or len(context.args) != 1:
-        await update.effective_message.reply_text("Использование: /force_ready <telegram_id>")
+        await update.effective_message.reply_text("Использование: /force_ready <telegram_name>")
         return
 
-    telegram_id = int(context.args[0])
-    player = db.get_player(telegram_id=telegram_id)
+    telegram_name = context.args[0]
+    if telegram_name[0] == "@":
+        telegram_name = telegram_name[1:]
+    player = db.get_player(telegram_name=telegram_name)
 
     if not player:
         await update.effective_message.reply_text("Пользователь не зарегистрирован.")
@@ -567,11 +573,13 @@ async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if not context.args or len(context.args) != 1:
-        await update.effective_message.reply_text("Использование: /force_unready <telegram_id>")
+        await update.effective_message.reply_text("Использование: /force_unready <telegram_name>")
         return
 
-    telegram_id = int(context.args[0])
-    player = db.get_player(telegram_id=telegram_id)
+    telegram_name = context.args[0]
+    if telegram_name[0] == "@":
+        telegram_name = telegram_name[1:]
+    player = db.get_player(telegram_name=telegram_name)
 
     if not player:
         await update.effective_message.reply_text("Пользователь не зарегистрирован.")
@@ -678,12 +686,20 @@ async def force_unnext_command(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         await update.effective_message.reply_text("Ошибка обновления статуса")
 
-def timestring_from_timestamp(timestamp: int) -> str:
+def timestring_from_timestamp(timestamp: int, weekday=False, day=False) -> str:
     timezone = pytz.timezone("Europe/Moscow")
-    return datetime.datetime.fromtimestamp(timestamp, tz=timezone).strftime('%d.%m %H:%M')
+    res = ""
+    weekdays = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
+    date = datetime.datetime.fromtimestamp(timestamp, tz=timezone)
+    if weekday:
+        res += weekdays[date.weekday()]+" "
+    if day:
+        res += f"{date.strftime('%d.%m')} "
+    res += f"{date.strftime('%H:%M')}"
+    return res
 
-def table_string(table: Table, mention: bool = False) -> str:
-    ans = timestring_from_timestamp(table.time)+" - "+f"Стол {table.table_id}:\n"
+def table_string(table: Table, mention: bool = False, explicit = True) -> str:
+    ans = timestring_from_timestamp(table.time, weekday=explicit, day=explicit)+" - "+f"Стол {table.table_id}:\n"
     for i, player in enumerate(table.players):
         if mention:
             ans += player.clean_mention()
