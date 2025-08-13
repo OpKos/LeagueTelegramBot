@@ -52,7 +52,9 @@ class Game(Base):
     table: Mapped["Table"] = relationship(back_populates="games", lazy="subquery")
     players_seats: Mapped[list["GamePlayer"]] = relationship(back_populates="game", lazy="subquery")
     @property
-    def players(self): return [p.player for p in self.players_seats]
+    def players(self): 
+        self.players_seats.sort(key=lambda p: p.seat)  
+        return [p.player for p in self.players_seats]
 
 class GamePlayer(Base):
     __tablename__ = "game_player_a"
@@ -73,7 +75,9 @@ class Table(Base):
     @property
     def unfinished_games(self): return [g for g in self.games if g.started == 0]
     @property
-    def players(self): return [tp.player for tp in self.players_seats]
+    def players(self): 
+        self.players_seats.sort(key=lambda tp: tp.seat)
+        return [tp.player for tp in self.players_seats]
 
 class TablePlayer(Base):
     __tablename__ = "table_player_a"
