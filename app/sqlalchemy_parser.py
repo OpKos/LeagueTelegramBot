@@ -16,7 +16,6 @@ class Player(Base):
     tenhou_name: Mapped[str] = mapped_column(unique=True)
     irl_name: Mapped[str] = mapped_column(nullable=True)
     enable_seating: Mapped[int] = mapped_column(insert_default=0)
-    next_table_ready: Mapped[int] = mapped_column(insert_default=0)
     games_seats: Mapped[list["GamePlayer"]] = relationship(back_populates="player", lazy="subquery")
     tables_seats: Mapped[list["TablePlayer"]] = relationship(back_populates="player", lazy="subquery")
 
@@ -235,7 +234,7 @@ class SqliteParser:
 
     def backup_database(self):
         try:
-            backup_dir = "backups"
+            backup_dir = "../backups"
             os.makedirs(backup_dir, exist_ok=True)
             current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = os.path.join(backup_dir, f"{os.path.basename(self.db_path)}_{current_time}.db")

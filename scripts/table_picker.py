@@ -3,7 +3,7 @@ import json
 import os
 import random
 from collections import Counter, defaultdict
-from sqlalchemy_parser import SqliteParser, Table, TablePlayer
+from app.sqlalchemy_parser import SqliteParser, Table
 import configparser
 
 config = configparser.ConfigParser()

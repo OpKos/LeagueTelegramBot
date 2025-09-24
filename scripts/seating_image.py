@@ -1,18 +1,21 @@
 from PIL import Image, ImageDraw, ImageFont
 from PIL.Image import Resampling
-from sqlalchemy_parser import SqliteParser, Table
+from app.sqlalchemy_parser import SqliteParser
 import configparser
+from matplotlib import font_manager
 
 config = configparser.ConfigParser()
 config.read("config.ini")
 db_path = config.get("Settings", "database")
 db = SqliteParser(db_path)
 
-REVEAL_START = 1
-REVEAL_END = 2
+REVEAL_START = 113
+REVEAL_END = 142
 
-name_font = ImageFont.truetype(font="/home/konstantin/.local/share/fonts/indestructible type*/TrueType/Jost/Jost_Regular.ttf", size=25)
-table_font = ImageFont.truetype(font="/home/konstantin/.local/share/fonts/indestructible type*/TrueType/Jost/Jost_Regular.ttf", size=25)
+name_font_file = font_manager.findfont("Jost", fallback_to_default=False)
+name_font = ImageFont.truetype(font=name_font_file, size=25)
+table_font_file = font_manager.findfont("Jost", fallback_to_default=False)
+table_font = ImageFont.truetype(font=table_font_file, size=25)
 table_font.set_variation_by_name('Bold')
 
 bg_color = (255, 255, 255)
@@ -24,14 +27,14 @@ row_h = 35
 block_w = 300
 gap = 10
 inter_gap = 16
-grid_w = 1
+grid_w = 5
 grid_h = (n+grid_w-1)//grid_w
 width = grid_w * (block_w+inter_gap)+400
 height = n*400
 image = Image.new(mode="RGBA", size=(width,height), color=bg_color)
 d = ImageDraw.Draw(image)
 tables = [db.get_table_by_reveal_order(order) for order in range(REVEAL_START, REVEAL_END+1)]
-tables.sort(key=lambda el: (len(el.players), el.table_id)) # pyright: ignore[reportOptionalMemberAccess]
+tables.sort(key=lambda el: (len(el.players), el.table_id))
 
 top = row_h+10
 center = inter_gap+block_w//2+100
@@ -44,7 +47,7 @@ for i, table in enumerate(tables):
         center += block_w+inter_gap+30
     table_h = row_h * (len(table.players)+1) + gap*2
     if grid_x == grid_w-1 and grid_y == 0:
-        top_wave = Image.open("top_wave.png").resize((120,120), resample=Resampling.LANCZOS)
+        top_wave = Image.open("images/top_wave.png").resize((120, 120), resample=Resampling.LANCZOS)
         image.paste(im=top_wave, box=(center+block_w//2-10-38, top-40), mask=top_wave)
         true_w = center+block_w//2+100
     d.rounded_rectangle(xy=(center-block_w/2, top, center+block_w/2, top+table_h), outline=kawa_blue, width=4, radius=14)
@@ -56,7 +59,7 @@ for i, table in enumerate(tables):
         top+=row_h
     top += inter_gap+gap
     if grid_y == grid_h-1 and grid_x == 0:
-        bot_wave = Image.open("bot_wave.png").resize((154,119), resample=Resampling.LANCZOS)
+        bot_wave = Image.open("images/bot_wave.png").resize((154, 119), resample=Resampling.LANCZOS)
         image.paste(im=bot_wave, box=(center-block_w//2-144+38, top-76-inter_gap), mask=bot_wave)
         true_h = top+row_h
     if grid_y < grid_h-1 and i < len(tables)-1:

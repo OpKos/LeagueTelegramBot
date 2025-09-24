@@ -1,7 +1,7 @@
 # table_reveal.py
 import json
 import os
-from sqlalchemy_parser import SqliteParser
+from app.sqlalchemy_parser import SqliteParser
 import configparser
 
 config = configparser.ConfigParser()
