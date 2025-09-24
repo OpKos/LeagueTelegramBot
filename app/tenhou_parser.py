@@ -89,6 +89,3 @@ class TenhouClient():
                 return "STARTED", [], True
         except Exception as e:
             return "EXCEPTION", [], False
-
-
-c = TenhouClient(lobby="C1053882869114720", game_type="0009", is_enable=True)
