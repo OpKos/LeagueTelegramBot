@@ -1,6 +1,6 @@
 # stage1_seating.py
 import random
-from sqlalchemy_parser import SqliteParser, Player, Table, TablePlayer, Game, GamePlayer
+from app.sqlalchemy_parser import SqliteParser, Player, Table, TablePlayer, Game, GamePlayer
 import configparser
 
 # Сид можно задать для воспроизводимости

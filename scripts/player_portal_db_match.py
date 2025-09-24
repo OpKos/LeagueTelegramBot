@@ -1,5 +1,5 @@
 import json
-from sqlalchemy_parser import SqliteParser
+from app.sqlalchemy_parser import SqliteParser
 import configparser
 
 
