@@ -1,8 +1,10 @@
-from sqlalchemy import create_engine, select, ForeignKey, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session, relationship, sessionmaker
-import logging, os, shutil
 from datetime import datetime
-from typing import Optional
+import logging
+import os
+import shutil
+
+from sqlalchemy import create_engine, ForeignKey, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 logger = logging.getLogger(__name__)
 
