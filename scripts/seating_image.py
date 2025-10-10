@@ -5,12 +5,12 @@ import configparser
 from matplotlib import font_manager
 
 config = configparser.ConfigParser()
-config.read("config.ini")
+config.read("app/config.ini")
 db_path = config.get("Settings", "database")
 db = SqliteParser(db_path)
 
-REVEAL_START = 113
-REVEAL_END = 142
+REVEAL_START = 143
+REVEAL_END = 158
 
 name_font_file = font_manager.findfont("Jost", fallback_to_default=False)
 name_font = ImageFont.truetype(font=name_font_file, size=25)
@@ -21,13 +21,14 @@ table_font.set_variation_by_name('Bold')
 bg_color = (255, 255, 255)
 kawa_yellow = (244, 169, 61)
 kawa_blue = (63, 99, 155)
+kawa_red = (217, 89, 108)
 
 n=REVEAL_END-REVEAL_START+1
 row_h = 35
 block_w = 300
 gap = 10
 inter_gap = 16
-grid_w = 5
+grid_w = 4
 grid_h = (n+grid_w-1)//grid_w
 width = grid_w * (block_w+inter_gap)+400
 height = n*400
@@ -52,7 +53,10 @@ for i, table in enumerate(tables):
         true_w = center+block_w//2+100
     d.rounded_rectangle(xy=(center-block_w/2, top, center+block_w/2, top+table_h), outline=kawa_blue, width=4, radius=14)
     top += gap
-    d.text(anchor="mm", xy=(center, top+row_h/2), text=f"Стол {table.table_id}", fill=kawa_yellow, font=table_font)
+    text_color = kawa_yellow
+    if len(table.games) > 4:
+        text_color = kawa_red
+    d.text(anchor="mm", xy=(center, top+row_h/2), text=f"Стол {table.table_id}", fill=text_color, font=table_font)
     top += row_h
     for player in table.players:
         d.text(anchor="mm", xy=(center, top+row_h/2), text=f"{player.irl_name}", fill=kawa_blue, font=name_font)
