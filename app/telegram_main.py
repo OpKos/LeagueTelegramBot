@@ -10,7 +10,7 @@ from telegram import Update, Bot
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from sqlalchemy_parser import SqliteParser, Table
+from sqlalchemy_parser import SqliteParser
 from tenhou_parser import TenhouClient
 
 # Настройка логирования
@@ -59,7 +59,7 @@ ready_players = set()
 def restart_services():
     """Перезапускает SqliteParser и TenhouClient с новыми настройками."""
     global db, tenhou_client
-
+    logger.info("Перезапуск сервисов...")
     # Перезагружаем конфигурацию
     config.read("config.ini")
 
@@ -73,48 +73,6 @@ def restart_services():
     # Перезапускаем TenhouClient
     tenhou_client = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
 
-async def my_games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Получает и отображает игры пользователя, сгруппированные по столам, только для текущей стадии турнира.
-
-    Args:
-        update (Update): Объект Update от Telegram.
-        context (ContextTypes.DEFAULT_TYPE): Контекст выполнения команды.
-    """
-    user = update.effective_user
-    assert user
-    logger.info("User %s (%s) issued /my_games command.", user.username, user.id)
-    assert update.effective_message is not None
-    if update.effective_message.chat.type != "private":
-        await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
-        return
-    
-    player = db.get_player(telegram_id=user.id)
-    
-    if not player:
-        await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
-        logger.info("User %s (%s) is not registered in the system.", user.username, user.id)
-        return
-    
-    # Получаем игры только для текущей стадии турнира
-    tables = player.visible_tables
-    if not tables:
-        await update.effective_message.reply_text("У вас нет активных игр.")
-        logger.info("User %s (%s) has no active games on the current stage.", user.username, user.id)
-        return
-    
-    message = "Ваши игры:\n"
-    for table in tables:
-        message += f"Стол {table.table_id}:\n"
-        for player in table.players:
-            message += f"{player.irl_name} ({player.dirty_mention()})\n"
-        started_games = len(table.games)-len(table.unfinished_games)
-        total_games = len(table.games)
-        message += f"Сыграно игр: {started_games} из {total_games}\n\n"
-    
-    await update.effective_message.reply_text(message)
-    logger.info("User %s (%s) games: %s", user.username, user.id, message)
-
 async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Регистрирует нового игрока в системе.
@@ -127,8 +85,10 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     args = context.args
     assert update.effective_message
     assert user
+    logger.info("User %s (%s) issued /register command with args: %s", user.username, user.id, args)
     
     if not args or len(args) != 1:
+        logger.info("User %s (%s) used /register with invalid args: %s", user.username, user.id, args)
         await update.effective_message.reply_text("Использование: /register <tenhou_id>")
         return
 
@@ -143,6 +103,7 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         else:
             db.update_tenhou_nick(p_id=player.p_id, tenhou_name=tenhou_name)
             await update.effective_message.reply_text(f"Ник изменён с {old_name} на {tenhou_name}.")
+        logger.info("User %s (%s) already registered with Tenhou ID %s.", user.username, user.id, tenhou_name)
         return
 
     # Регистрируем нового игрока
@@ -155,7 +116,7 @@ async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user = update.effective_user
     assert user
     assert update.effective_message
-    
+    logger.info("User %s (%s) issued /ready command.", user.username, user.id)
     player = db.get_player(telegram_id=user.id)
     
     if not player:
@@ -172,7 +133,7 @@ async def unready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = update.effective_user
     assert user
     assert update.effective_message
-    
+    logger.info("User %s (%s) issued /unready command.", user.username, user.id)
     player = db.get_player(telegram_id=user.id)
     
     if not player:
@@ -210,10 +171,12 @@ async def start_game_with_players(context: ContextTypes.DEFAULT_TYPE, game_id: i
         db.set_game_status(game.game_id, 1)
         seat_winds_names = ["東", "南", "西", "北"]
         # Отправляем уведомление в группу
+        text=f"Игра за столом {game.table.table_id} запущена:"
+        for i, p in enumerate(game.players):
+            text += f"\n{seat_winds_names[i]} {p.irl_name} ({p.tenhou_name})"
         await context.bot.send_message(
             chat_id="@kawaleague",
-            text=f"Игра за столом {game.table.table_id} запущена:\n"
-            f"{'\n'.join(seat_winds_names[i] + ' ' + p.irl_name + ' (' + p.tenhou_name + ')' for i, p in enumerate(game.players))}"
+            text=text
         )
         
         logger.info(f"Игра за столом {game.table.table_id} успешно запущена")
@@ -277,7 +240,7 @@ async def start_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user = update.effective_user
     assert user
     assert update.effective_message
-    
+    logger.info("User %s (%s) issued /start_game command with args: %s", user.username, user.id, context.args)
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам")
         return
@@ -304,18 +267,33 @@ async def next_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user = update.effective_user
     if not user or not update.effective_message:
         return
-
+    logger.info("User %s (%s) issued /next_table command.", user.username, user.id)
     player = db.get_player(telegram_id=user.id)
     if not player:
         await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
         return
-
+    if not context.args:
+        goal = 1
+    elif len(context.args) != 1:
+        await update.effective_message.reply_text("Использование: /next_table <amount>")
+        return
+    else:
+        goal = int(context.args[0])
+    
+    if goal < 0:
+        await update.effective_message.reply_text("Отрицательные значения не принимаются.")
+        return
+    
+    if not player.invisible_tables:
+        await update.effective_message.reply_text("У вас нет скрытых столов.")
+        return
+    
     # Помечаем игрока как готового
-    if not db.set_next_table_ready(player.p_id):
+    if not db.set_target_tables(player.p_id, goal=goal):
         await update.effective_message.reply_text("Ошибка обновления статуса.")
         return
 
-    await update.effective_message.set_reaction("👍")
+    await update.effective_message.reply_text(f"Принято, целевое число столов: {player.target_tables}.")
 
     # Ищем стол для раскрытия
     tables_to_check = [t for t in player.all_tables if not t.visible]
@@ -326,24 +304,22 @@ async def next_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 await notify_table_revealed(context.bot, table)
             break
 
-async def notify_table_revealed(bot: Bot, table: Table, additional_info=""):
+async def notify_table_revealed(bot: Bot, table, additional_info=""):
     """Уведомляет о раскрытии стола с порядком"""
     player_names = [p.irl_name for p in table.players]
     message = (
-        f"Новый стол {table.table_id} стол!\n"
-        f"Игроки: {', '.join(player_names)}\n"
-        f"Используйте /my_games для просмотра"
+        f"Раскрыт стол {table.table_id}!\n"+
+        '\n'.join(player_names)+"\n"
     )
     
     await bot.send_message(chat_id="@kawaleague", text=message)
-    
     # Персональные уведомления
     for p in table.players:
         if p.telegram_id:
             try:
                 await bot.send_message(
                     chat_id=p.telegram_id,
-                    text=f"Новый стол: {table.table_id}!"
+                    text=message
                 )
             except Exception as e:
                 logger.error(f"Ошибка уведомления {p.irl_name}: {e}")
@@ -449,7 +425,7 @@ async def timetable_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     assert user
     assert update.effective_message
     
-    logger.info("User %s (%s) issued /my_games command.", user.username, user.id)
+    logger.info("User %s (%s) issued /timetable command.", user.username, user.id)
     if update.effective_message.chat.type != "private":
         await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
         return
@@ -488,7 +464,7 @@ async def update_game_status_command(update: Update, context: ContextTypes.DEFAU
     game_id = int(context.args[0])
     status = int(context.args[1])
 
-    if status not in ["1", "0"]:
+    if status not in [0, 1]:
         await update.effective_message.reply_text("Invalid status. Use '1' for started or '0' for not started.")
         return
 
@@ -591,24 +567,6 @@ async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await update.effective_message.reply_text(f"Игрок {player.irl_name} не был помечен как готов.")
         
-async def unnext_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Снимает готовность к следующему столу"""
-    user = update.effective_user
-    assert user
-    assert update.effective_message
-    
-    if not user or not update.effective_message:
-        return
-
-    player = db.get_player(telegram_id=user.id)
-    if not player:
-        await update.effective_message.reply_text("Вы не зарегистрированы.")
-        return
-
-    if db.set_next_table_ready(player.p_id, False):
-        await update.effective_message.set_reaction("👍")
-    else:
-        await update.effective_message.reply_text("Ошибка обновления статуса.")
 
 async def force_reveal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Админская команда раскрытия стола через стандартный метод"""
@@ -648,41 +606,17 @@ async def force_next_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.effective_message.reply_text("Только для админов")
         return
 
-    if not context.args or len(context.args) != 1:
-        await update.effective_message.reply_text("Использование: /force_next <telegram_name>")
+    if not context.args or len(context.args) != 2:
+        await update.effective_message.reply_text("Использование: /force_next <telegram_name> <amount>")
         return
 
     player = db.get_player(telegram_name=context.args[0])
     if not player:
         await update.effective_message.reply_text("Игрок не найден")
         return
-
-    if db.set_next_table_ready(player.p_id, True):
+    goal = int(context.args[1])
+    if db.set_target_tables(player.p_id, goal=goal):
         await update.effective_message.reply_text(f"Игрок @{context.args[0]} готов к следующему столу")
-    else:
-        await update.effective_message.reply_text("Ошибка обновления статуса")
-
-async def force_unnext_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Админская команда снятия готовности через стандартный метод"""
-    user = update.effective_user
-    assert user
-    assert update.effective_message
-    
-    if not is_admin(user.id):
-        await update.effective_message.reply_text("Только для админов")
-        return
-
-    if not context.args or len(context.args) != 1:
-        await update.effective_message.reply_text("Использование: /force_unnext <telegram_name>")
-        return
-
-    player = db.get_player(telegram_name=context.args[0])
-    if not player:
-        await update.effective_message.reply_text("Игрок не найден")
-        return
-
-    if db.set_next_table_ready(player.p_id, False):
-        await update.effective_message.reply_text(f"Снята готовность у @{context.args[0]}")
     else:
         await update.effective_message.reply_text("Ошибка обновления статуса")
 
@@ -698,7 +632,7 @@ def timestring_from_timestamp(timestamp: int, weekday=False, day=False) -> str:
     res += f"{date.strftime('%H:%M')}"
     return res
 
-def table_string(table: Table, mention: bool = False, explicit = True) -> str:
+def table_string(table, mention: bool = False, explicit = True) -> str:
     ans = timestring_from_timestamp(table.time, weekday=explicit, day=explicit)+" - "+f"Стол {table.table_id}:\n"
     for i, player in enumerate(table.players):
         if mention:
@@ -721,7 +655,7 @@ async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
     started, total = db.get_games_status()
     tables = [i for i in tables if i.time and i.time >= now.timestamp() and i.time < tommorow.timestamp()]
     tables.sort(key=lambda el: el.time)
-    games = [table_string(table, mention=True) for table in tables]
+    games = [table_string(table, mention=True, explicit=False) for table in tables]
     ans = f"Доброе утро, запущено игр: {started}/{total}"
     if games:
         ans += "\nСегодня играют:\n\n"+"".join(games)
@@ -767,21 +701,30 @@ async def get_player_info_command(update: Update, context: ContextTypes.DEFAULT_
         await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
         return
     
-    if not context.args or len(context.args) != 1:
-        await update.effective_message.reply_text("Использование: /player_info <telegram_id>")
+    if not context.args:
+        player = player = db.get_player(telegram_id=user.id)
+    
+    elif len(context.args) != 1:
+        await update.effective_message.reply_text("Использование: /player_info <telegram_name>")
         return
-    telegram_name = context.args[0]
-    if telegram_name[0] == "@":
-        telegram_name = telegram_name[1:]
-    player = db.get_player(telegram_name=telegram_name)
+    else:  
+        telegram_name = context.args[0]
+        if telegram_name[0] == "@":
+            telegram_name = telegram_name[1:]
+        player = db.get_player(telegram_name=telegram_name)
 
     if not player:
         await update.effective_message.reply_text("Пользователь не зарегистрирован.")
         return
 
-    message = f"ID в базе: {player.p_id}\n"\
+    message = ""
+    if is_admin(user.id):
+        message += f"ID в базе: {player.p_id}\n"\
               f"Telegram ID: {player.telegram_id}\n"\
-              f"Telegram хэндл: @{player.telegram_name}\n"\
+              f"Таргет столов: {player.target_tables}\n"
+    
+    
+    message += f"Telegram хэндл: @{player.telegram_name}\n"\
               f"Tenhou ник: {player.tenhou_name}\n"\
               f"Имя: {player.irl_name}\n\n"
 
@@ -789,13 +732,15 @@ async def get_player_info_command(update: Update, context: ContextTypes.DEFAULT_
         message += f"Стол {table.table_id}\n"
         for i in table.players:
             message += f"{i.irl_name} ({i.dirty_mention()})\n"
+        if table.unfinished_games and table.time:
+            message += f"Время: {timestring_from_timestamp(table.time, weekday=True, day=True)}\n"
         message += f"Сыграно: {len(table.games)-len(table.unfinished_games)} из {len(table.games)} игр\n\n"
     
     if player.invisible_tables and is_admin(user.id):
         ids = [i.table_id for i in player.invisible_tables]
         message += f"Скрытые столы: {ids}\n\n"
     await update.effective_message.reply_text(message)
-    logger.info("Admin %s requested info for player %s", user.full_name, player.irl_name)
+    logger.info("Person %s requested info for player %s", user.full_name, player.irl_name)
     
 async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -826,9 +771,9 @@ async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_T
               f"{'Стол скрыт 🔒' if not table.visible else ''}\n"
     for i in table.players:
         message += f"{i.irl_name} ({i.dirty_mention()})\n"
-    message += f"Осталось сыграть: {len(table.unfinished_games)} из {len(table.games)} игр\n"
+    message += f"Сыграно: {len(table.games) - len(table.unfinished_games)} из {len(table.games)} игр\n"
     if table.time:
-        message += f"Время: {timestring_from_timestamp(table.time)}"
+        message += f"Время: {timestring_from_timestamp(table.time, weekday=True, day=True)}"
     message += "\n\n"
     
     games = table.games
@@ -958,6 +903,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         awaiting_db_upload = False
         await update.effective_message.reply_text("Новая база данных успешно загружена.")
         logger.info("Admin %s (%s) uploaded a new database.", user.username, user.id)
+        restart_services()
 
     elif awaiting_settings_upload:
         new_settings_path = "config.ini.new"
@@ -983,17 +929,15 @@ def main() -> None:
     with open("token.txt", "r") as file:
         token = file.read().strip()
     
-    application = Application.builder().token(token).write_timeout(30).read_timeout(30).connect_timeout(30).build()
+    application = Application.builder().token(token).write_timeout(30).read_timeout(30).connect_timeout(300).build()
     
     # Добавляем обработчики команд
-    application.add_handler(CommandHandler("my_games", my_games_command))
     application.add_handler(CommandHandler("register", register_command))
     application.add_handler(CommandHandler("ready", ready_command))
     application.add_handler(CommandHandler("unready", unready_command))
     application.add_handler(CommandHandler("start_table", start_table_command))
     application.add_handler(CommandHandler("start_game", start_game_command))
     application.add_handler(CommandHandler("next_table", next_table_command))
-    application.add_handler(CommandHandler("unnext_table", unnext_table_command))
     application.add_handler(CommandHandler("update_game_status", update_game_status_command))
     application.add_handler(CommandHandler("backup", backup_command))
     application.add_handler(CommandHandler("get_db", get_db_command))
@@ -1006,8 +950,7 @@ def main() -> None:
     application.add_handler(CommandHandler("force_unready", force_unready_command))
     application.add_handler(CommandHandler("force_reveal", force_reveal_command))
     application.add_handler(CommandHandler("force_next", force_next_command))
-    application.add_handler(CommandHandler("force_unnext", force_unnext_command))
-    application.add_handler(CommandHandler("player_info", get_player_info_command))
+    application.add_handler(CommandHandler(["player_info", "my_games"], get_player_info_command))
     application.add_handler(CommandHandler("table_info", get_table_info_command))
     application.add_handler(CommandHandler("start_status_message", start_status_message_command))
     application.add_handler(CommandHandler("set_time", set_time_command))

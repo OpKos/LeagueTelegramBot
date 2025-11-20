@@ -1,97 +1,17 @@
+from sqlalchemy import create_engine, func
+from sqlalchemy.orm import sessionmaker
+import logging, os, shutil
 from datetime import datetime
-import logging
-import os
-import shutil
 
-from sqlalchemy import create_engine, ForeignKey, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
+import settings
+import models
 
 logger = logging.getLogger(__name__)
-
-class Base(DeclarativeBase): pass
-
-class Player(Base):
-    __tablename__ = "players"
-    p_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    telegram_id: Mapped[int] = mapped_column(unique=True)
-    telegram_name: Mapped[str] = mapped_column(nullable=True)
-    tenhou_name: Mapped[str] = mapped_column(unique=True)
-    irl_name: Mapped[str] = mapped_column(nullable=True)
-    enable_seating: Mapped[int] = mapped_column(insert_default=0)
-    games_seats: Mapped[list["GamePlayer"]] = relationship(back_populates="player", lazy="subquery")
-    tables_seats: Mapped[list["TablePlayer"]] = relationship(back_populates="player", lazy="subquery")
-
-    @property
-    def visible_tables(self): 
-        return [tp.table for tp in self.tables_seats if getattr(tp.table, "visible", 0)]
-    
-    @property
-    def invisible_tables(self): 
-        return [tp.table for tp in self.tables_seats if not getattr(tp.table, "visible", 0)]
-    
-    @property
-    def all_tables(self): 
-        return [tp.table for tp in self.tables_seats]
-    
-    def dirty_mention(self) -> str:
-        return f"@{self.telegram_name}"
-    
-    def clean_mention(self) -> str:
-        """
-        Only works with ParseMode.HTML
-        """
-        return f"<a href=\'tg://user?id={self.telegram_id}\'>{self.irl_name}</a>"
-    
-    def __str__(self): 
-        return self.irl_name or self.telegram_name
-
-class Game(Base):
-    __tablename__ = "games"
-    game_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    table_id: Mapped[int] = mapped_column(ForeignKey("tables.table_id"))
-    started: Mapped[int] = mapped_column(insert_default=0)
-    table: Mapped["Table"] = relationship(back_populates="games", lazy="subquery")
-    players_seats: Mapped[list["GamePlayer"]] = relationship(back_populates="game", lazy="subquery")
-    @property
-    def players(self): 
-        self.players_seats.sort(key=lambda p: p.seat)  
-        return [p.player for p in self.players_seats]
-
-class GamePlayer(Base):
-    __tablename__ = "game_player_a"
-    game_id: Mapped[int] = mapped_column(ForeignKey("games.game_id"), primary_key=True)
-    p_id: Mapped[int] = mapped_column(ForeignKey("players.p_id"))
-    seat: Mapped[int] = mapped_column(primary_key=True)
-    game: Mapped[Game] = relationship(back_populates="players_seats", lazy="subquery")
-    player: Mapped[Player] = relationship(back_populates="games_seats", lazy="subquery")
-
-class Table(Base):
-    __tablename__ = "tables"
-    table_id: Mapped[int] = mapped_column(primary_key=True)
-    visible: Mapped[int] = mapped_column(insert_default=0)
-    reveal_order: Mapped[int] = mapped_column(insert_default=0)
-    time: Mapped[int] = mapped_column(insert_default=0)
-    games: Mapped[list[Game]] = relationship(back_populates="table", lazy="subquery")
-    players_seats: Mapped[list["TablePlayer"]] = relationship(back_populates="table", lazy="subquery")
-    @property
-    def unfinished_games(self): return [g for g in self.games if g.started == 0]
-    @property
-    def players(self): 
-        self.players_seats.sort(key=lambda tp: tp.seat)
-        return [tp.player for tp in self.players_seats]
-
-class TablePlayer(Base):
-    __tablename__ = "table_player_a"
-    table_id: Mapped[int] = mapped_column(ForeignKey("tables.table_id"), primary_key=True)
-    p_id: Mapped[int] = mapped_column(ForeignKey("players.p_id"))
-    seat: Mapped[int] = mapped_column(primary_key=True)
-    table: Mapped[Table] = relationship(back_populates="players_seats", lazy="subquery")
-    player: Mapped[Player] = relationship(back_populates="tables_seats", lazy="subquery")
 
 class SqliteParser:
     def __init__(self, db_path: str):
         self.db_path = db_path
-        self.engine = create_engine(f'sqlite:///{db_path}')
+        self.engine = create_engine(f'postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{settings.DB_NAME}')
         self.Session = sessionmaker(bind=self.engine)
         self.session = self.Session()
         
@@ -107,7 +27,7 @@ class SqliteParser:
         return True
     
     def register_player(self, telegram_id: int, telegram_name: str|None, tenhou_id: str):
-        player = Player(
+        player = models.Player(
             telegram_id=telegram_id,
             telegram_name=telegram_name,
             tenhou_name=tenhou_id,
@@ -118,7 +38,7 @@ class SqliteParser:
         self.session.commit()
 
     def fill_player_data(self, p_id: int, irl_name: str, include_status: int):
-        player = self.session.get(Player, p_id)
+        player = self.session.get(models.Player, p_id)
         assert player
         player.irl_name = irl_name
         player.enable_seating = bool(include_status)
@@ -126,53 +46,53 @@ class SqliteParser:
         self.session.commit()
                 
     def update_tenhou_nick(self, p_id: int, tenhou_name: str):
-        player = self.session.get(Player, p_id)
+        player = self.session.get(models.Player, p_id)
         assert player
         player.tenhou_name = tenhou_name
         self.backup_database()
         self.session.commit()
             
     def get_player(self, p_id=None, telegram_id=None, telegram_name=None, tenhou_name=None):
-        query = self.session.query(Player)
+        query = self.session.query(models.Player)
         if p_id:
-            query = query.filter(Player.p_id==p_id)
+            query = query.filter(models.Player.p_id==p_id)
         if telegram_id:
-            query = query.filter(Player.telegram_id==telegram_id)
+            query = query.filter(models.Player.telegram_id==telegram_id)
         if telegram_name:
-            query = query.filter(Player.telegram_name==telegram_name)
+            query = query.filter(models.Player.telegram_name==telegram_name)
         if tenhou_name:
-            query = query.filter(Player.tenhou_name==tenhou_name)
+            query = query.filter(models.Player.tenhou_name==tenhou_name)
         return query.first()
 
     def get_all_games(self):
-        return self.session.query(Game).all()
+        return self.session.query(models.Game).all()
 
     def set_game_status(self, game_id: int, status: int):
-        game = self.session.get(Game, game_id)
+        game = self.session.get(models.Game, game_id)
         assert game
         game.started = status
         self.backup_database()
         self.session.commit()
     
     def get_games_status(self):
-        started = self.session.query(Game).filter(Game.started != 0).count()
-        total = self.session.query(Game).count()
+        started = self.session.query(models.Game).filter(models.Game.started != 0).count()
+        total = self.session.query(models.Game).count()
         return started, total
 
     def get_game(self, game_id: int):
-        return self.session.get(Game, game_id)
+        return self.session.get(models.Game, game_id)
 
     def get_table(self, table_id: int):
-        return self.session.get(Table, table_id)
+        return self.session.get(models.Table, table_id)
     
     def get_visible_table(self, table_id: int):
-        table = self.session.get(Table, table_id)
+        table = self.session.get(models.Table, table_id)
         if table and table.visible:
             return table
         return None
     
     def set_table_time(self, table_id: int, timestamp: int):
-        table = self.session.get(Table, table_id)
+        table = self.session.get(models.Table, table_id)
         if table is None:
             return False
         table.time = timestamp
@@ -181,20 +101,21 @@ class SqliteParser:
         return True
 
     def get_all_tables(self):
-        return self.session.query(Table).all()
+        return self.session.query(models.Table).all()
     
     def get_visible_tables(self):
-        return self.session.query(Table).filter(Table.visible > 0).all()
+        return self.session.query(models.Table).filter(models.Table.visible > 0).all()
         
     def get_unfinished_visible_tables(self):
-        tables = self.session.query(Table).all()
+        tables = self.session.query(models.Table).all()
         return [table for table in tables if table.unfinished_games and table.visible]
 
-    def set_next_table_ready(self, p_id: int, ready: bool = True):
+    def set_target_tables(self, p_id: int, goal: int = 1):
         """Помечает игрока как готового к следующему столу"""
-        player = self.session.get(Player, p_id)
+        player = self.session.get(models.Player, p_id)
         if player:
-            player.next_table_ready = ready
+            goal = min(goal, len(player.invisible_tables()))
+            player.target_tables =len(player.visible_tables())+goal
             self.backup_database()
             self.session.commit()
             return True
@@ -202,7 +123,7 @@ class SqliteParser:
 
     def check_table_reveal_ready(self, table_id: int):
         """Проверяет, готов ли стол к раскрытию"""
-        table = self.session.get(Table, table_id)
+        table = self.session.get(models.Table, table_id)
         
         if not table or table.visible:
             return False
@@ -211,17 +132,13 @@ class SqliteParser:
 
     def reveal_table(self, table_id: int):
         """Раскрывает стол и снимает пометки о готовности"""
-        table = self.session.get(Table, table_id)
+        table = self.session.get(models.Table, table_id)
         
         if not table or table.visible:
             return False
 
         # Получаем максимальный текущий порядок раскрытия
-        max_order = self.session.query(func.max(Table.reveal_order)).scalar() or 0
-        
-        # Снимаем пометки о готовности
-        for tp in table.players_seats:
-            tp.player.next_table_ready = False
+        max_order = self.session.query(func.max(models.Table.reveal_order)).scalar() or 0
             
         # Раскрываем стол с новым порядком
         table.visible = True
@@ -231,12 +148,12 @@ class SqliteParser:
         return True
     
     def get_table_by_reveal_order(self, reveal_order: int):
-        query = self.session.query(Table).filter(Table.reveal_order==reveal_order)
+        query = self.session.query(models.Table).filter(models.Table.reveal_order==reveal_order)
         return query.first()
 
     def backup_database(self):
         try:
-            backup_dir = "../backups"
+            backup_dir = "backups"
             os.makedirs(backup_dir, exist_ok=True)
             current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = os.path.join(backup_dir, f"{os.path.basename(self.db_path)}_{current_time}.db")
