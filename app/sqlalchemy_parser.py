@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 
 class SqliteParser:
     def __init__(self, db_path: str):
-        self.db_path = db_path
         self.engine = create_engine(f'postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{settings.DB_NAME}')
+        logger.log(f'postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{settings.DB_NAME}')
         self.Session = sessionmaker(bind=self.engine)
         self.session = self.Session()
         
@@ -31,7 +31,7 @@ class SqliteParser:
             telegram_id=telegram_id,
             telegram_name=telegram_name,
             tenhou_name=tenhou_id,
-            enable_seating=False
+            enable_seating=0
         )
         self.session.add(player)
         self.backup_database()
