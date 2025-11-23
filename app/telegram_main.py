@@ -10,7 +10,7 @@ from telegram import Update, Bot
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from sqlalchemy_parser import SqliteParser
+from sqlalchemy_parser import SqlParser
 from tenhou_parser import TenhouClient
 
 # Настройка логирования
@@ -43,7 +43,7 @@ config.read("config.ini")
 db_path = config.get("Settings", "database")
 lobby = config.get("Settings", "lobby")
 
-db = SqliteParser(db_path)
+db = SqlParser()
 tenhou_client = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
 
 # Загрузка ID администраторов
@@ -57,18 +57,17 @@ def is_admin(user_id: int) -> bool:
 ready_players = set()
 
 def restart_services():
-    """Перезапускает SqliteParser и TenhouClient с новыми настройками."""
+    """Перезапускает SqlParser и TenhouClient с новыми настройками."""
     global db, tenhou_client
     logger.info("Перезапуск сервисов...")
     # Перезагружаем конфигурацию
     config.read("config.ini")
 
-    # Обновляем путь к базе данных и параметры лобби
-    db_path = config.get("Settings", "database")
+    # Обновляем параметры лобби
     lobby = config.get("Settings", "lobby")
 
-    # Перезапускаем SqliteParser
-    db = SqliteParser(db_path)
+    # Перезапускаем SqlParser
+    db = SqlParser()
 
     # Перезапускаем TenhouClient
     tenhou_client = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
@@ -477,20 +476,6 @@ async def update_game_status_command(update: Update, context: ContextTypes.DEFAU
         await update.effective_message.reply_text(f"Не удалось обновить статус игры с ID {game_id}.")
         logger.error("Admin %s (%s) failed to update game status with game ID %s to %s.", user.username, user.id, game_id, status)
 
-async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Создает резервную копию базы данных (только для администраторов)."""
-    user = update.effective_user
-    assert user
-    assert update.effective_message
-    
-    if not is_admin(user.id):
-        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
-        return
-
-    db.backup_database()
-    await update.effective_message.reply_text("Резервная копия базы данных успешно создана.")
-    logger.info("Admin %s (%s) created a database backup.", user.username, user.id)
-
 async def get_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет файл с логами администратору."""
     user = update.effective_user
@@ -800,38 +785,7 @@ async def pantheon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return
 
 # Глобальные переменные для режима ожидания
-awaiting_db_upload = False
 awaiting_settings_upload = False
-
-async def get_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправляет текущую базу данных администратору."""
-    user = update.effective_user
-    assert user
-    assert update.effective_message
-    
-    if not is_admin(user.id):
-        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
-        return
-
-    with open(db.db_path, "rb") as db_file:
-        await update.effective_message.reply_document(document=db_file)
-    logger.info("Admin %s (%s) requested the database.", user.username, user.id)
-
-async def set_db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Загружает новую базу данных (только для администраторов)."""
-    global awaiting_db_upload
-
-    user = update.effective_user
-    assert user
-    assert update.effective_message
-    if not is_admin(user.id):
-        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
-        return
-
-    awaiting_db_upload = True
-    await update.effective_message.reply_text("Пожалуйста, загрузите файл базы данных.")
-    logger.info("Admin %s (%s) initiated database upload.", user.username, user.id)
-
 
 async def reload_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Admin command to reload database session"""
@@ -891,21 +845,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     document = update.effective_message.document
     file_path = await document.get_file()
 
-    if awaiting_db_upload:
-        new_db_path = f"{db.db_path}.new"
-        await file_path.download_to_drive(custom_path=new_db_path)
-
-        # Создаем резервную копию текущей базы данных
-        db.backup_database()
-
-        # Заменяем текущую базу данных новой
-        os.replace(new_db_path, db.db_path)
-        awaiting_db_upload = False
-        await update.effective_message.reply_text("Новая база данных успешно загружена.")
-        logger.info("Admin %s (%s) uploaded a new database.", user.username, user.id)
-        restart_services()
-
-    elif awaiting_settings_upload:
+    if awaiting_settings_upload:
         new_settings_path = "config.ini.new"
         await file_path.download_to_drive(custom_path=new_settings_path)
 
@@ -939,9 +879,6 @@ def main() -> None:
     application.add_handler(CommandHandler("start_game", start_game_command))
     application.add_handler(CommandHandler("next_table", next_table_command))
     application.add_handler(CommandHandler("update_game_status", update_game_status_command))
-    application.add_handler(CommandHandler("backup", backup_command))
-    application.add_handler(CommandHandler("get_db", get_db_command))
-    application.add_handler(CommandHandler("set_db", set_db_command))
     application.add_handler(CommandHandler("reload_db", reload_session_command))
     application.add_handler(CommandHandler("get_settings", get_settings_command))
     application.add_handler(CommandHandler("set_settings", set_settings_command))

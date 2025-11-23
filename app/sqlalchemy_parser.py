@@ -1,17 +1,16 @@
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
-import logging, os, shutil
-from datetime import datetime
+import logging
 
 import settings
 import models
 
 logger = logging.getLogger(__name__)
 
-class SqliteParser:
-    def __init__(self, db_path: str):
+class SqlParser:
+    def __init__(self):
+        logger.info(f'postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{settings.DB_NAME}')
         self.engine = create_engine(f'postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{settings.DB_NAME}')
-        logger.log(f'postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{settings.DB_NAME}')
         self.Session = sessionmaker(bind=self.engine)
         self.session = self.Session()
         
@@ -34,7 +33,6 @@ class SqliteParser:
             enable_seating=0
         )
         self.session.add(player)
-        self.backup_database()
         self.session.commit()
 
     def fill_player_data(self, p_id: int, irl_name: str, include_status: int):
@@ -42,14 +40,12 @@ class SqliteParser:
         assert player
         player.irl_name = irl_name
         player.enable_seating = bool(include_status)
-        self.backup_database()
         self.session.commit()
                 
     def update_tenhou_nick(self, p_id: int, tenhou_name: str):
         player = self.session.get(models.Player, p_id)
         assert player
         player.tenhou_name = tenhou_name
-        self.backup_database()
         self.session.commit()
             
     def get_player(self, p_id=None, telegram_id=None, telegram_name=None, tenhou_name=None):
@@ -71,7 +67,6 @@ class SqliteParser:
         game = self.session.get(models.Game, game_id)
         assert game
         game.started = status
-        self.backup_database()
         self.session.commit()
     
     def get_games_status(self):
@@ -96,7 +91,6 @@ class SqliteParser:
         if table is None:
             return False
         table.time = timestamp
-        self.backup_database()
         self.session.commit()
         return True
 
@@ -116,7 +110,6 @@ class SqliteParser:
         if player:
             goal = min(goal, len(player.invisible_tables()))
             player.target_tables =len(player.visible_tables())+goal
-            self.backup_database()
             self.session.commit()
             return True
         return False
@@ -143,21 +136,9 @@ class SqliteParser:
         # Раскрываем стол с новым порядком
         table.visible = True
         table.reveal_order = max_order + 1
-        self.backup_database()
         self.session.commit()
         return True
     
     def get_table_by_reveal_order(self, reveal_order: int):
         query = self.session.query(models.Table).filter(models.Table.reveal_order==reveal_order)
         return query.first()
-
-    def backup_database(self):
-        try:
-            backup_dir = "backups"
-            os.makedirs(backup_dir, exist_ok=True)
-            current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = os.path.join(backup_dir, f"{os.path.basename(self.db_path)}_{current_time}.db")
-            shutil.copyfile(self.db_path, backup_path)
-            logger.info(f"Backup created at {backup_path}")
-        except Exception as e:
-            logger.error("Error in backup_database: %s", str(e))

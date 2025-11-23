@@ -4,3 +4,4 @@ sqlalchemy==2.0.43
 python-telegram-bot[job-queue]==22.2
 pytz==2025.2
 psycopg2-binary==2.9.10
+alembic==1.17.2
