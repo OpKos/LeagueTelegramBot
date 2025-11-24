@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import configparser
+import json
 import datetime
 import logging
 import os
@@ -56,6 +57,13 @@ def is_admin(user_id: int) -> bool:
 # Глобальная переменная для хранения ID готовых игроков
 ready_players = set()
 
+with open("locales.json", "r", encoding="utf-8") as f:
+    LOCALES = json.load(f)
+
+def tr(lang, key, **kwargs):
+    template = LOCALES.get(key).get(lang)
+    return template.format(**kwargs)
+
 def restart_services():
     """Перезапускает SqlParser и TenhouClient с новыми настройками."""
     global db, tenhou_client
@@ -88,7 +96,7 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     if not args or len(args) != 1:
         logger.info("User %s (%s) used /register with invalid args: %s", user.username, user.id, args)
-        await update.effective_message.reply_text("Использование: /register <tenhou_id>")
+        await update.effective_message.reply_text(tr("en", "register_invalid_args"))
         return
 
     tenhou_name = args[0]
@@ -96,18 +104,22 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Проверяем, не зарегистрирован ли уже пользователь
     player = db.get_player(telegram_id=user.id)
     if player:
+        lang = player.language
         old_name = player.tenhou_name
         if old_name == tenhou_name:
-            await update.effective_message.reply_text("Вы уже зарегистрированы в системе.")
+            await update.effective_message.reply_text(tr(lang, "already_registered", old=old_name, new=tenhou_name))
         else:
             db.update_tenhou_nick(p_id=player.p_id, tenhou_name=tenhou_name)
-            await update.effective_message.reply_text(f"Ник изменён с {old_name} на {tenhou_name}.")
+            await update.effective_message.reply_text(tr(lang, "nick_change", old=old_name, new=tenhou_name))
         logger.info("User %s (%s) already registered with Tenhou ID %s.", user.username, user.id, tenhou_name)
         return
 
     # Регистрируем нового игрока
     db.register_player(telegram_id=user.id, telegram_name=user.username, tenhou_id=tenhou_name)
-    await update.effective_message.reply_text("Вы успешно зарегистрированы!")
+    await update.effective_message.reply_text(
+        tr("ru", "register_success")+
+        "\n"+tr("en", "register_success")+
+        "\nUse /set_language to change your language")
     logger.info("User %s (%s) registered with Tenhou ID %s.", user.username, user.id, tenhou_name)
 
 async def ready_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -551,7 +563,6 @@ async def force_unready_command(update: Update, context: ContextTypes.DEFAULT_TY
         await update.effective_message.reply_text(f"Игрок {player.irl_name} снят с готовности.")
     else:
         await update.effective_message.reply_text(f"Игрок {player.irl_name} не был помечен как готов.")
-        
 
 async def force_reveal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Админская команда раскрытия стола через стандартный метод"""
@@ -864,6 +875,23 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.effective_message.reply_text("Неожиданно получен файл. Пожалуйста, используйте команду для загрузки перед отправкой файла.")
         logger.info("Unexpected file received from user %s (%s).", user.username, user.id)
 
+async def set_language(update, context):
+    user_id = update.effective_user.id
+    if not context.args or context.args[0] not in ("ru", "en"):
+        await update.message.reply_text("Usage: /set_language ru|en")
+        return
+
+    lang = context.args[0]
+    p_id = db.get_player(telegram_id=user_id).p_id
+
+    if not p_id:
+        await update.message.reply_text(tr(lang, "not_registered"))
+        return
+
+    db.set_language(p_id, lang)
+    await update.message.reply_text(tr(lang, "language_set"))
+
+
 def main() -> None:
     """Запускает бота."""
     with open("token.txt", "r") as file:
@@ -896,7 +924,7 @@ def main() -> None:
     application.add_handler(CommandHandler("status", status_command))
     application.add_handler(CommandHandler("lobby", lobby_command))
     application.add_handler(CommandHandler("pantheon", pantheon_command))
-    
+    application.add_handler(CommandHandler("set_language", set_language))
     
     
     application.add_handler(MessageHandler(filters.Document.ALL & filters.ChatType.PRIVATE, handle_document))

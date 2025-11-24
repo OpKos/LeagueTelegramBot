@@ -1,0 +1,26 @@
+{
+    "register_invalid_args": {
+        "ru": "Использование: /register tenhou_nick",
+        "en": "Usage: /register tenhou_nick"
+    },
+    "already_registered": {
+        "ru": "Вы уже зарегистрированы в системе.",
+        "en": "You are already registered in the system."
+    },
+    "nick_change":{
+        "ru": "Ник изменён с {old} на {new}.",
+        "en": "Nick changed from {old} to {new}."
+    },
+    "register_success":{
+        "ru": "Вы успешно зарегистрированы!",
+        "en": "Successfully registered!"
+    },
+    "not_registered": {
+        "ru": "Вы не зарегистрированы.",
+        "en": "You are not registered."
+    },
+    "language_set": {
+        "ru": "Язык переключён на русский.",
+        "en": "Language switched to English."
+    }
+}

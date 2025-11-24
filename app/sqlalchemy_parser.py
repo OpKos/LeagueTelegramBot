@@ -142,3 +142,9 @@ class SqlParser:
     def get_table_by_reveal_order(self, reveal_order: int):
         query = self.session.query(models.Table).filter(models.Table.reveal_order==reveal_order)
         return query.first()
+
+    def set_language(self, p_id: int, lang: str):
+        player = self.session.get(models.Player, p_id)
+        if player:
+            player.language = lang
+            self.session.commit()

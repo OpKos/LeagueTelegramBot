@@ -1,3 +1,4 @@
+import sqlalchemy
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -6,12 +7,11 @@ from .base import Base
 class Player(Base):
     __tablename__ = "players"
     p_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    telegram_id: Mapped[int] = mapped_column(unique=True)
+    telegram_id: Mapped[int] = mapped_column(sqlalchemy.BigInteger, unique=True)
     telegram_name: Mapped[str] = mapped_column(nullable=True)
     tenhou_name: Mapped[str] = mapped_column(unique=True)
     irl_name: Mapped[str] = mapped_column(nullable=True)
-    enable_seating: Mapped[int] = mapped_column(insert_default=0)
-    target_tables: Mapped[int] = mapped_column(insert_default=0)
+    language: Mapped[str] = mapped_column(insert_default="ru", server_default="ru")
     games_seats: Mapped[list["GamePlayer"]] = relationship(back_populates="player", lazy="subquery")
     tables_seats: Mapped[list["TablePlayer"]] = relationship(back_populates="player", lazy="subquery")
 
