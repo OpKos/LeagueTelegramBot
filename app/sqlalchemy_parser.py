@@ -29,8 +29,7 @@ class SqlParser:
         player = models.Player(
             telegram_id=telegram_id,
             telegram_name=telegram_name,
-            tenhou_name=tenhou_id,
-            enable_seating=0
+            tenhou_name=tenhou_id
         )
         self.session.add(player)
         self.session.commit()
