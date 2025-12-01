@@ -9,8 +9,9 @@ logger = logging.getLogger(__name__)
 
 class SqlParser:
     def __init__(self):
-        logger.info(f'postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{settings.DB_NAME}')
-        self.engine = create_engine(f'postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{settings.DB_NAME}')
+        db_link = f'postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{settings.DB_NAME}'
+        logger.info(db_link)
+        self.engine = create_engine(db_link)
         self.Session = sessionmaker(bind=self.engine)
         self.session = self.Session()
         
