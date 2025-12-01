@@ -14,6 +14,7 @@ class Player(Base):
     language: Mapped[str] = mapped_column(insert_default="ru", server_default="ru")
     games_seats: Mapped[list["GamePlayer"]] = relationship(back_populates="player", lazy="subquery")
     tables_seats: Mapped[list["TablePlayer"]] = relationship(back_populates="player", lazy="subquery")
+    player_events: Mapped[list["EventPlayer"]] = relationship(back_populates="player", lazy="subquery")
 
     def visible_tables(self):
         return [tp.table for tp in self.tables_seats if getattr(tp.table, "visible", 0)]
