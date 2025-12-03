@@ -9,8 +9,11 @@ from telegram import Update, Bot
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+import models
 from sqlalchemy_parser import SqlParser
 from tenhou_parser import TenhouClient
+
+from event_portal_update import event_portal_update
 
 with open("locales.json", "r", encoding="utf-8") as f:
     LOCALES = json.load(f)
@@ -44,9 +47,11 @@ def is_admin(user_id: int) -> bool:
     """Проверяет, является ли пользователь администратором."""
     return user_id in admins
 
+
 def tr(lang, key, **kwargs):
     template = LOCALES.get(key).get(lang)
     return template.format(**kwargs)
+
 
 async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -89,6 +94,7 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         "\n" + tr("en", "register_success") +
         "\nUse /set_language to change your language")
     logger.info("User %s (%s) registered with Tenhou ID %s.", user.username, user.id, tenhou_name)
+
 
 async def start_game_with_players(context: ContextTypes.DEFAULT_TYPE, game_id: int):
     game = db.get_game(game_id)
@@ -453,6 +459,7 @@ async def get_logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.effective_message.reply_text(f"Произошла ошибка при отправке логов: {e}")
         logger.error("Error sending log file to admin %s (%s): %s", user.username, user.id, e)
 
+
 async def force_reveal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Админская команда раскрытия стола через стандартный метод"""
     user = update.effective_user
@@ -577,7 +584,7 @@ async def start_status_message_command(update: Update, context: ContextTypes.DEF
     tz = pytz.timezone("Europe/Moscow")
     callback_time = datetime.time(hour=10, minute=0, tzinfo=tz)
     context.job_queue.run_daily(send_game_status_message, time=callback_time, chat_id="@kawaleague",
-                                name=str(chat_id))  # pyright: ignore[reportArgumentType]
+                                name=str(chat_id))
     text = "Timer successfully set!"
     await update.effective_message.reply_text(text)
 
@@ -709,6 +716,7 @@ async def reload_session_command(update: Update, context: ContextTypes.DEFAULT_T
     else:
         await update.effective_message.reply_text("❌ Failed to reload session")
 
+
 async def get_settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправляет текущий файл настроек администратору."""
     user = update.effective_user
@@ -721,6 +729,7 @@ async def get_settings_command(update: Update, context: ContextTypes.DEFAULT_TYP
     with open("config.ini", "rb") as settings_file:
         await update.effective_message.reply_document(document=settings_file)
     logger.info("Admin %s (%s) requested the settings file.", user.username, user.id)
+
 
 async def set_language(update, context):
     user_id = update.effective_user.id
@@ -737,3 +746,24 @@ async def set_language(update, context):
 
     db.set_language(p_id, lang)
     await update.message.reply_text(tr(lang, "language_set"))
+
+
+async def update_event_players_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    assert user
+    assert update.effective_message
+    assert context.job_queue
+
+    if not is_admin(user.id):
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
+        return
+
+    logger.info("Admin %s (%s) updated players in events.", user.username, user.id)
+
+    events = db.get_signup_events()
+
+    for event in events:
+        db.clear_event_players(event.event_id)
+        res = event_portal_update(db, event)
+        await update.effective_message.reply_text(f"Event {event.event_id}\n{res}")
+        logger.info("Updated event %s", event.event_id)

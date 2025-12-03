@@ -35,11 +35,10 @@ class SqlParser:
         self.session.add(player)
         self.session.commit()
 
-    def fill_player_data(self, p_id: int, irl_name: str, include_status: int):
+    def fill_player_data(self, p_id: int, irl_name: str):
         player = self.session.get(models.Player, p_id)
         assert player
         player.irl_name = irl_name
-        player.enable_seating = bool(include_status)
         self.session.commit()
                 
     def update_tenhou_nick(self, p_id: int, tenhou_name: str):
@@ -148,3 +147,14 @@ class SqlParser:
         if player:
             player.language = lang
             self.session.commit()
+
+    def get_signup_events(self):
+        return self.session.query(models.Event).filter(models.Event.signup == 1).all()
+
+    def clear_event_players(self, event_id: int):
+        self.session.query(models.EventPlayer).filter(models.EventPlayer.event_id == event_id).delete()
+        self.session.commit()
+
+    def add_event_player(self, event_id: int, player_id: int):
+        self.session.add(models.EventPlayer(event_id=event_id, p_id=player_id))
+        self.session.commit()

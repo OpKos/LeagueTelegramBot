@@ -30,7 +30,8 @@ def main() -> None:
     application.add_handler(CommandHandler("lobby", lobby_command))
     application.add_handler(CommandHandler("pantheon", pantheon_command))
     application.add_handler(CommandHandler("set_language", set_language))
-    
+    application.add_handler(CommandHandler("update_event_players", update_event_players_command))
+
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
