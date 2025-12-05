@@ -9,11 +9,11 @@ from telegram import Update, Bot
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-import models
 from sqlalchemy_parser import SqlParser
 from tenhou_parser import TenhouClient
 
 from event_portal_update import event_portal_update
+from seating_functions import create_seating
 
 with open("locales.json", "r", encoding="utf-8") as f:
     LOCALES = json.load(f)
@@ -159,14 +159,13 @@ async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.info(f"Стол {table_id} не найден")
         return
 
-    games = table.unfinished_games
+    games = table.unfinished_games()
     if not games:
         await update.effective_message.reply_text(f"Нет неначатых игр за столом {table_id}")
         logger.info(f"Нет игр за столом {table_id}")
         return
 
-    # Проверка для столов с более чем 4 игроками
-    if len(games) > 1 and len(table.players) > 4:
+    if len(games) > 1 and len(table.players()) > 4:
         await update.effective_message.reply_text(
             "Запуск игр для столов с >4 игроками доступен только через /start_game game_id.\n"
             "Используйте /table_info table_id для нахождения game_id нужной игры"
@@ -256,7 +255,7 @@ async def next_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             break
 
 
-async def notify_table_revealed(bot: Bot, table, additional_info=""):
+async def notify_table_revealed(bot: Bot, table):
     """Уведомляет о раскрытии стола с порядком"""
     player_names = [p.irl_name for p in table.players]
     message = (
@@ -265,16 +264,6 @@ async def notify_table_revealed(bot: Bot, table, additional_info=""):
     )
 
     await bot.send_message(chat_id="@kawaleague", text=message)
-    # Персональные уведомления
-    for p in table.players:
-        if p.telegram_id:
-            try:
-                await bot.send_message(
-                    chat_id=p.telegram_id,
-                    text=message
-                )
-            except Exception as e:
-                logger.error(f"Ошибка уведомления {p.irl_name}: {e}")
 
 
 async def set_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -489,31 +478,6 @@ async def force_reveal_command(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.effective_message.reply_text("Ошибка раскрытия стола")
 
 
-async def force_next_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Админская команда установки готовности через стандартный метод"""
-    user = update.effective_user
-    assert user
-    assert update.effective_message
-
-    if not is_admin(user.id):
-        await update.effective_message.reply_text("Только для админов")
-        return
-
-    if not context.args or len(context.args) != 2:
-        await update.effective_message.reply_text("Использование: /force_next <telegram_name> <amount>")
-        return
-
-    player = db.get_player(telegram_name=context.args[0])
-    if not player:
-        await update.effective_message.reply_text("Игрок не найден")
-        return
-    goal = int(context.args[1])
-    if db.set_target_tables(player.p_id, goal=goal):
-        await update.effective_message.reply_text(f"Игрок @{context.args[0]} готов к следующему столу")
-    else:
-        await update.effective_message.reply_text("Ошибка обновления статуса")
-
-
 def timestring_from_timestamp(timestamp: int, weekday=False, day=False) -> str:
     timezone = pytz.timezone("Europe/Moscow")
     res = ""
@@ -541,7 +505,6 @@ def table_string(table, mention: bool = False, explicit=True) -> str:
         else:
             ans += ".\n\n"
     return ans
-
 
 async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
     started, total = db.get_games_status()
@@ -767,3 +730,20 @@ async def update_event_players_command(update: Update, context: ContextTypes.DEF
         res = event_portal_update(db, event)
         await update.effective_message.reply_text(f"Event {event.event_id}\n{res}")
         logger.info("Updated event %s", event.event_id)
+
+
+async def create_seating_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    assert user
+    assert update.effective_message
+    assert context.job_queue
+
+    if not is_admin(user.id):
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
+        return
+
+    event = db.get_event(int(context.args[0]))
+    logger.info("Admin %s (%s) created seating for event %s", user.username, user.id, event.event_id)
+    create_seating(db, event)
+    await update.effective_message.reply_text("Seating created")
+

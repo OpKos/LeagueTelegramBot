@@ -19,7 +19,6 @@ def main() -> None:
     application.add_handler(CommandHandler("get_settings", get_settings_command))
     application.add_handler(CommandHandler("get_logs", get_logs_command))
     application.add_handler(CommandHandler("force_reveal", force_reveal_command))
-    application.add_handler(CommandHandler("force_next", force_next_command))
     application.add_handler(CommandHandler(["player_info", "my_games"], get_player_info_command))
     application.add_handler(CommandHandler("table_info", get_table_info_command))
     application.add_handler(CommandHandler("start_status_message", start_status_message_command))
@@ -31,6 +30,7 @@ def main() -> None:
     application.add_handler(CommandHandler("pantheon", pantheon_command))
     application.add_handler(CommandHandler("set_language", set_language))
     application.add_handler(CommandHandler("update_event_players", update_event_players_command))
+    application.add_handler(CommandHandler("create_seating", create_seating_command))
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

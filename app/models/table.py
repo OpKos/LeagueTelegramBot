@@ -5,7 +5,8 @@ from .base import Base
 
 class Table(Base):
     __tablename__ = "tables"
-    table_id: Mapped[int] = mapped_column(primary_key=True)
+    table_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(nullable=True)
     visible: Mapped[int] = mapped_column(insert_default=0)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.event_id"))
     time: Mapped[int] = mapped_column(insert_default=0)

@@ -1,4 +1,4 @@
-from app.sqlalchemy_parser import SqliteParser, Player, Table, TablePlayer, Game, GamePlayer
+from app.sqlalchemy_parser import SqlParser, Player, Table, TablePlayer, Game, GamePlayer
 
 import configparser
 
@@ -15,7 +15,7 @@ FOUR_SEAT_ORDERS = [
 ]
 
 def main(db_path: str):
-    db = SqliteParser(db_path)
+    db = SqlParser(db_path)
     ids = open("extra_ids.txt", "r", encoding="utf-8").readlines()
     players = []
     for id in ids:

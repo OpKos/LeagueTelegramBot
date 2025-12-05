@@ -35,6 +35,30 @@ class SqlParser:
         self.session.add(player)
         self.session.commit()
 
+    def create_table_with_players(self, event_id: int, table_name: str, players: list[models.Player]):
+        table = models.Table(
+            event_id=event_id,
+            name=table_name
+        )
+        self.session.add(table)
+        self.session.commit()
+        for seat, player in enumerate(players):
+            table_player = models.TablePlayer(table_id=table.table_id, p_id=player.p_id, seat=seat)
+            self.session.add(table_player)
+
+        return table
+
+    def create_game_with_players(self, table_id: int, players: list[models.Player]):
+        game = models.Game(
+            table_id=table_id
+        )
+        self.session.add(game)
+        self.session.commit()
+        for seat, player in enumerate(players):
+            game_player = models.GamePlayer(game_id=game.game_id, p_id=player.p_id, seat=seat)
+            self.session.add(game_player)
+        self.session.commit()
+
     def fill_player_data(self, p_id: int, irl_name: str):
         player = self.session.get(models.Player, p_id)
         assert player
@@ -78,7 +102,10 @@ class SqlParser:
 
     def get_table(self, table_id: int):
         return self.session.get(models.Table, table_id)
-    
+
+    def get_event(self, event_id: int):
+        return self.session.get(models.Event, event_id)
+
     def get_visible_table(self, table_id: int):
         table = self.session.get(models.Table, table_id)
         if table and table.visible:
@@ -123,24 +150,14 @@ class SqlParser:
         return all(p.player.next_table_ready for p in table.players_seats)
 
     def reveal_table(self, table_id: int):
-        """Раскрывает стол и снимает пометки о готовности"""
         table = self.session.get(models.Table, table_id)
         
         if not table or table.visible:
             return False
 
-        # Получаем максимальный текущий порядок раскрытия
-        max_order = self.session.query(func.max(models.Table.reveal_order)).scalar() or 0
-            
-        # Раскрываем стол с новым порядком
         table.visible = True
-        table.reveal_order = max_order + 1
         self.session.commit()
         return True
-    
-    def get_table_by_reveal_order(self, reveal_order: int):
-        query = self.session.query(models.Table).filter(models.Table.reveal_order==reveal_order)
-        return query.first()
 
     def set_language(self, p_id: int, lang: str):
         player = self.session.get(models.Player, p_id)
