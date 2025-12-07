@@ -155,8 +155,9 @@ async def ready_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             db.set_game_status(game.game_id, 1)
             seat_winds_names = ["東", "南", "西", "北"]
             text = f"Игра за столом {game.table.name} запущена:"
-            for i, p in enumerate(game.players):
+            for i, p in enumerate(game.players()):
                 text += f"\n{seat_winds_names[i]} {p.irl_name} ({p.tenhou_name})"
+                db.set_player_unready(p.p_id)
             await context.bot.send_message(
                 chat_id="@kawaleague",
                 text=text
@@ -757,9 +758,9 @@ async def chat_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         logger.error(e)
         return
     for player in table.players():
-        try:
-            await chat.get_member(player.telegram_id)
-        except TelegramError as e:
+        member = await chat.get_member(player.telegram_id)
+        logger.info(member)
+        if str(member.status).lower() == "left":
             try:
                 await context.bot.send_message(chat_id=player.telegram_id, text=f"Чат стола {table_name}:\n{link.invite_link}")
                 await chat.send_message(f"Ссылка отправлена {player.irl_name}.")
@@ -769,8 +770,8 @@ async def chat_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def set_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_message.chat.type != "group":
-        await update.effective_message.reply_text(f"Доступно только в группах.")
+    if update.effective_message.chat.type != "supergroup":
+        await update.effective_message.reply_text(f"Доступно только в супергруппах.")
         return
     member = await update.effective_message.chat.get_member(context.bot.id)
     if member.status != "administrator":
