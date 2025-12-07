@@ -38,7 +38,11 @@ def event_portal_update(db: SqlParser, event: models.Event):
             db.fill_player_data(player.p_id, name)
             res.append(f"player updated in database: {name}")
             if include:
-                db.add_event_player(event_id=event.event_id, player_id=player.p_id)
+                if player.full_ready == 1:
+                    table_minimum = 10000
+                else:
+                    table_minimum = 0
+                db.add_event_player(event_id=event.event_id, player_id=player.p_id, table_minimum=table_minimum)
         else:
             res.append(f"player not found in database: {name}")
     return "\n".join(res)

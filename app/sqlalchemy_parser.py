@@ -1,6 +1,7 @@
-from sqlalchemy import create_engine, func
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import logging
+import random
 
 import settings
 import models
@@ -130,34 +131,48 @@ class SqlParser:
         tables = self.session.query(models.Table).all()
         return [table for table in tables if table.unfinished_games and table.visible]
 
-    def set_target_tables(self, p_id: int, goal: int = 1):
-        """Помечает игрока как готового к следующему столу"""
+    def set_target_tables(self, p_id: int, goal: int = 1, full: bool = False):
         player = self.session.get(models.Player, p_id)
         if player:
-            goal = min(goal, len(player.invisible_tables()))
-            player.target_tables =len(player.visible_tables())+goal
+            eps = player.player_events
+            for ep in eps:
+                logger.info(f"Setting target tables for event_player {ep.event_id} {ep.p_id}")
+                if ep.event.started == 0:
+                    continue
+                if full:
+                    ep.table_minimum = len(ep.tables())
+                    logger.info(f"Target set {len(ep.tables())}")
+                else:
+                    ep.table_minimum = len(ep.visible_tables()) + goal
+                    logger.info(f"Target set {len(ep.visible_tables()) + goal}")
             self.session.commit()
             return True
+        self.session.commit()
         return False
 
-    def check_table_reveal_ready(self, table_id: int):
-        """Проверяет, готов ли стол к раскрытию"""
+    def reveal_table(self, table_id: int, cache: bool = False):
         table = self.session.get(models.Table, table_id)
-        
         if not table or table.visible:
             return False
-            
-        return all(p.player.next_table_ready for p in table.players_seats)
-
-    def reveal_table(self, table_id: int):
-        table = self.session.get(models.Table, table_id)
-        
-        if not table or table.visible:
-            return False
-
-        table.visible = True
+        table.visible = 1
+        if cache:
+            table.reveal_cached = 1
         self.session.commit()
         return True
+
+    def try_reveal(self, event_id: int, cache: bool = False):
+        event = self.get_event(event_id)
+        tables = [table for table in event.tables]
+        random.shuffle(tables)
+        tables.sort(key=lambda table: table.reveal_priority(), reverse=True)
+        logger.info(f"Best table: {tables[0].table_id}, prio: {tables[0].reveal_priority()}")
+        for ep in tables[0].get_event_players():
+            logger.info(f"Player {ep.p_id}, visible_tables: {len(ep.visible_tables())}")
+        if tables[0].reveal_priority() == 0:
+            return False
+        else:
+            self.reveal_table(tables[0].table_id, cache=cache)
+            return tables[0]
 
     def set_language(self, p_id: int, lang: str):
         player = self.session.get(models.Player, p_id)
@@ -172,6 +187,9 @@ class SqlParser:
         self.session.query(models.EventPlayer).filter(models.EventPlayer.event_id == event_id).delete()
         self.session.commit()
 
-    def add_event_player(self, event_id: int, player_id: int):
-        self.session.add(models.EventPlayer(event_id=event_id, p_id=player_id))
+    def add_event_player(self, event_id: int, player_id: int, table_minimum: int = 0):
+        self.session.add(models.EventPlayer(event_id=event_id, p_id=player_id, table_minimum=table_minimum))
         self.session.commit()
+
+    def get_event_cached_tables(self, event_id: int):
+        return self.session.query(models.Table).filter(models.Table.event_id == event_id).filter(models.Table.reveal_cached == 1).all()

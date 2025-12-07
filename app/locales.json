@@ -22,5 +22,21 @@
     "language_set": {
         "ru": "Язык переключён на русский.",
         "en": "Language switched to English."
+    },
+    "next_table_fail": {
+        "ru": "Ошибка обновления статуса.",
+        "en": "Error changing status."
+    },
+    "next_table_success": {
+        "ru": "Принято, вы помечены для раскрытия следующего стола.",
+        "en": "Accepted, you are marked for revealing next table."
+    },
+    "all_tables_fail": {
+        "ru": "Ошибка обновления статуса.",
+        "en": "Error changing status."
+    },
+    "all_tables_success": {
+        "ru": "Принято, вы помечены для раскрытия всех столов.",
+        "en": "Accepted, you are marked for revealing all tables."
     }
 }

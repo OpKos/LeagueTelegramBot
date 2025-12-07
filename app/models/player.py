@@ -11,22 +11,20 @@ class Player(Base):
     telegram_name: Mapped[str] = mapped_column(nullable=True)
     tenhou_name: Mapped[str] = mapped_column(unique=True)
     irl_name: Mapped[str] = mapped_column(nullable=True)
+    full_ready: Mapped[int] = mapped_column(insert_default=0, server_default=sqlalchemy.text("0"))
     language: Mapped[str] = mapped_column(insert_default="ru", server_default="ru")
     games_seats: Mapped[list["GamePlayer"]] = relationship(back_populates="player", lazy="subquery")
     tables_seats: Mapped[list["TablePlayer"]] = relationship(back_populates="player", lazy="subquery")
     player_events: Mapped[list["EventPlayer"]] = relationship(back_populates="player", lazy="subquery")
 
     def visible_tables(self):
-        return [tp.table for tp in self.tables_seats if getattr(tp.table, "visible", 0)]
+        return [tp.table for tp in self.tables_seats if getattr(tp.table, "visible", 0) and tp.table.event.started == 1]
 
     def invisible_tables(self):
-        return [tp.table for tp in self.tables_seats if not getattr(tp.table, "visible", 0)]
+        return [tp.table for tp in self.tables_seats if not getattr(tp.table, "visible", 0) and tp.table.event.started == 1]
 
     def all_tables(self):
-        return [tp.table for tp in self.tables_seats]
-
-    def next_table_ready(self):
-        return self.target_tables > len(self.visible_tables())
+        return [tp.table for tp in self.tables_seats if tp.table.event.started == 1]
 
     def dirty_mention(self) -> str:
         return f"@{self.telegram_name}"

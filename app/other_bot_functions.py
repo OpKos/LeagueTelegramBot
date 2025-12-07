@@ -14,6 +14,7 @@ from tenhou_parser import TenhouClient
 
 from event_portal_update import event_portal_update
 from seating_functions import create_seating
+from seating_image import create_seating_image
 
 with open("locales.json", "r", encoding="utf-8") as f:
     LOCALES = json.load(f)
@@ -213,7 +214,6 @@ async def start_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def next_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Помечает игрока как готового к следующему столу"""
     user = update.effective_user
     if not user or not update.effective_message:
         return
@@ -222,47 +222,53 @@ async def next_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not player:
         await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
         return
-    if not context.args:
-        goal = 1
-    elif len(context.args) != 1:
-        await update.effective_message.reply_text("Использование: /next_table <amount>")
-        return
-    else:
-        goal = int(context.args[0])
-
-    if goal < 0:
-        await update.effective_message.reply_text("Отрицательные значения не принимаются.")
+    lang = player.language
+    if not db.set_target_tables(player.p_id, goal=1):
+        await update.effective_message.reply_text(tr(lang, "next_table_fail"))
         return
 
-    if not player.invisible_tables:
-        await update.effective_message.reply_text("У вас нет скрытых столов.")
+    await update.effective_message.reply_text(tr(lang, "next_table_success"))
+
+    for ep in player.player_events:
+        nt = db.try_reveal(ep.event_id)
+        while nt:
+            await notify_table_revealed(context.bot, nt)
+            nt = db.try_reveal(ep.event_id)
+
+
+async def all_tables_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if not user or not update.effective_message:
+        return
+    logger.info("User %s (%s) issued /all_tables command.", user.username, user.id)
+    player = db.get_player(telegram_id=user.id)
+    if not player:
+        await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
+        return
+    player.full_ready = 1
+    db.session.commit()
+    lang = player.language
+    if not db.set_target_tables(player.p_id, full=True):
+        await update.effective_message.reply_text(tr(lang, "all_tables_fail"))
         return
 
-    # Помечаем игрока как готового
-    if not db.set_target_tables(player.p_id, goal=goal):
-        await update.effective_message.reply_text("Ошибка обновления статуса.")
-        return
+    await update.effective_message.reply_text(tr(lang, "all_tables_success"))
 
-    await update.effective_message.reply_text(f"Принято, целевое число столов: {player.target_tables}.")
-
-    # Ищем стол для раскрытия
-    tables_to_check = [t for t in player.all_tables if not t.visible]
-
-    for table in tables_to_check:
-        if db.check_table_reveal_ready(table.table_id):
-            if db.reveal_table(table.table_id):
-                await notify_table_revealed(context.bot, table)
-            break
+    for ep in player.player_events:
+        if ep.event.started == 0:
+            continue
+        nt = db.try_reveal(ep.event_id)
+        while nt:
+            await notify_table_revealed(context.bot, nt)
+            nt = db.try_reveal(ep.event_id)
 
 
 async def notify_table_revealed(bot: Bot, table):
-    """Уведомляет о раскрытии стола с порядком"""
     player_names = [p.irl_name for p in table.players]
     message = (
-            f"Раскрыт стол {table.table_id}!\n" +
+            f"Раскрыт стол {table.name}!\n" +
             '\n'.join(player_names) + "\n"
     )
-
     await bot.send_message(chat_id="@kawaleague", text=message)
 
 
@@ -472,7 +478,7 @@ async def force_reveal_command(update: Update, context: ContextTypes.DEFAULT_TYP
     if db.reveal_table(table_id):
         table = db.get_table(table_id)
         assert table
-        await notify_table_revealed(context.bot, table, "Админ раскрыл стол")
+        await notify_table_revealed(context.bot, table)
         await update.effective_message.reply_text(f"Стол {table_id} раскрыт")
     else:
         await update.effective_message.reply_text("Ошибка раскрытия стола")
@@ -505,6 +511,7 @@ def table_string(table, mention: bool = False, explicit=True) -> str:
         else:
             ans += ".\n\n"
     return ans
+
 
 async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
     started, total = db.get_games_status()
@@ -565,7 +572,7 @@ async def get_player_info_command(update: Update, context: ContextTypes.DEFAULT_
         return
 
     if not context.args:
-        player = player = db.get_player(telegram_id=user.id)
+        player = db.get_player(telegram_id=user.id)
 
     elif len(context.args) != 1:
         await update.effective_message.reply_text("Использование: /player_info <telegram_name>")
@@ -583,23 +590,22 @@ async def get_player_info_command(update: Update, context: ContextTypes.DEFAULT_
     message = ""
     if is_admin(user.id):
         message += f"ID в базе: {player.p_id}\n" \
-                   f"Telegram ID: {player.telegram_id}\n" \
-                   f"Таргет столов: {player.target_tables}\n"
+                   f"Telegram ID: {player.telegram_id}\n"
 
     message += f"Telegram хэндл: @{player.telegram_name}\n" \
                f"Tenhou ник: {player.tenhou_name}\n" \
                f"Имя: {player.irl_name}\n\n"
 
-    for table in player.visible_tables:
-        message += f"Стол {table.table_id}\n"
-        for i in table.players:
+    for table in player.visible_tables():
+        message += f"Стол {table.name}\n"
+        for i in table.players():
             message += f"{i.irl_name} ({i.dirty_mention()})\n"
         if table.unfinished_games and table.time:
             message += f"Время: {timestring_from_timestamp(table.time, weekday=True, day=True)}\n"
-        message += f"Сыграно: {len(table.games) - len(table.unfinished_games)} из {len(table.games)} игр\n\n"
+        message += f"Сыграно: {len(table.games) - len(table.unfinished_games())} из {len(table.games)} игр\n\n"
 
-    if player.invisible_tables and is_admin(user.id):
-        ids = [i.table_id for i in player.invisible_tables]
+    if player.invisible_tables() and is_admin(user.id):
+        ids = [i.name for i in player.invisible_tables()]
         message += f"Скрытые столы: {ids}\n\n"
     await update.effective_message.reply_text(message)
     logger.info("Person %s requested info for player %s", user.full_name, player.irl_name)
@@ -734,9 +740,6 @@ async def update_event_players_command(update: Update, context: ContextTypes.DEF
 
 async def create_seating_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    assert user
-    assert update.effective_message
-    assert context.job_queue
 
     if not is_admin(user.id):
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
@@ -746,4 +749,42 @@ async def create_seating_command(update: Update, context: ContextTypes.DEFAULT_T
     logger.info("Admin %s (%s) created seating for event %s", user.username, user.id, event.event_id)
     create_seating(db, event)
     await update.effective_message.reply_text("Seating created")
+
+
+async def reveal_new_tables(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+
+    if not is_admin(user.id):
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
+        return
+
+    event = db.get_event(int(context.args[0]))
+    new_min = int(context.args[1])
+    new_max = int(context.args[2])
+    logger.info("Admin %s (%s) revealed new tables with new_min = %s and new_max = %s", user.username, event.event_id, new_min, new_max)
+    logger.info("Admin %s (%s) revealed new tables", user.username, event.event_id)
+    event.global_maximum = new_max
+    nt = db.try_reveal(event.event_id, cache=True)
+    while nt:
+        nt = db.try_reveal(event.event_id, cache=True)
+    event.global_minimum = new_min
+    nt = db.try_reveal(event.event_id, cache=True)
+    while nt:
+        nt = db.try_reveal(event.event_id, cache=True)
+    cached = db.get_event_cached_tables(event_id=event.event_id)
+    await update.effective_message.reply_text(f"Event {event.event_id} cached tables\n{' '.join(t.name for t in cached)}")
+
+
+async def seating_image_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+
+    if not is_admin(user.id):
+        await update.effective_message.reply_text("Эта команда доступна только администраторам.")
+        return
+
+    event = db.get_event(int(context.args[0]))
+    logger.info("Admin %s (%s) requested image for event %s", user.username, user.id, event.event_id)
+    create_seating_image(db, event)
+    with open("seating.png", "rb") as image_file:
+        await update.effective_message.reply_document(document=image_file)
 

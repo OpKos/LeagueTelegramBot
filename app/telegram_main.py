@@ -31,6 +31,10 @@ def main() -> None:
     application.add_handler(CommandHandler("set_language", set_language))
     application.add_handler(CommandHandler("update_event_players", update_event_players_command))
     application.add_handler(CommandHandler("create_seating", create_seating_command))
+    application.add_handler(CommandHandler("next_table", next_table_command))
+    application.add_handler(CommandHandler("all_tables", all_tables_command))
+    application.add_handler(CommandHandler("reveal_new_tables", reveal_new_tables))
+    application.add_handler(CommandHandler("seating_image", seating_image_command))
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

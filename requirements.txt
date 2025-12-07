@@ -7,3 +7,5 @@ psycopg2-binary==2.9.10
 alembic==1.17.2
 beautifulsoup4==4.13.4
 requests==2.32.4
+pillow==11.3.0
+matplotlib==3.10.6
