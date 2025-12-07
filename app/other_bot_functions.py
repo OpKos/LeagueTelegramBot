@@ -5,8 +5,9 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 import pytz
-from telegram import Update, Bot
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from sqlalchemy_parser import SqlParser
@@ -25,6 +26,12 @@ lobby = config.get("Settings", "lobby")
 db = SqlParser()
 tenhou_client = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
 admins = [int(config.get("Admins", key)) for key in config["Admins"] if key.startswith("tg_id")]
+
+ready_button_reply_markup = InlineKeyboardMarkup([[
+    InlineKeyboardButton("✅ Готов", callback_data="RBReady"),
+    InlineKeyboardButton("❌ Не готов", callback_data="RBUnready"),
+    InlineKeyboardButton("Отмена", callback_data="RBCancel")
+]])
 
 logger = logging.getLogger()
 
@@ -97,120 +104,74 @@ async def register_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     logger.info("User %s (%s) registered with Tenhou ID %s.", user.username, user.id, tenhou_name)
 
 
-async def start_game_with_players(context: ContextTypes.DEFAULT_TYPE, game_id: int):
-    game = db.get_game(game_id)
-    if not game:
-        return (False, f"Игра {game_id} не найдена")
-
-    # Проверяем, что стол видимый
-    if not game.table.visible:
-        return (False, f"Стол {game.table.table_id} скрыт")
-
-    # Проверяем, готовы ли все игроки
-    # not_ready_players = [p.irl_name for p in game.players if p.p_id not in ready_players]
-    not_ready_players = []
-    if not_ready_players:
-        return (False, f"Не все игроки готовы: {', '.join(not_ready_players)}")
-
-    # Запускаем игру в Tenhou
-    player_nicks = [p.tenhou_name for p in game.players]
-    result, missed_players, success = tenhou_client.start_game(player_nicks)  # pyright: ignore[reportGeneralTypeIssues]
-
-    if success:
-        db.set_game_status(game.game_id, 1)
-        seat_winds_names = ["東", "南", "西", "北"]
-        # Отправляем уведомление в группу
-        text = f"Игра за столом {game.table.table_id} запущена:"
-        for i, p in enumerate(game.players):
-            text += f"\n{seat_winds_names[i]} {p.irl_name} ({p.tenhou_name})"
-        await context.bot.send_message(
-            chat_id="@kawaleague",
-            text=text
-        )
-
-        logger.info(f"Игра за столом {game.table.table_id} успешно запущена")
-        return (True, None)  # Возвращаем None в сообщении при успехе
-    elif result == "MEMBER NOT FOUND":
-        return (False, f"Игроки не найдены: {', '.join(missed_players)}")
-    else:
-        return (False, f"Не удалось запустить игру: {result}")
-
-
 async def start_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Запускает игру за указанным столом"""
     user = update.effective_user
-    assert user
-    assert update.effective_message
 
-    logger.info(f"Пользователь {user.username} ({user.id}) вызвал /start_table с аргументами: {context.args}")
+    logger.info(f"Пользователь {user.username} ({user.id}) вызвал /start_table.")
 
-    if not context.args or len(context.args) != 1:
-        await update.effective_message.reply_text("Использование: /start_table <table_id>")
-        return
-
-    try:
-        table_id = int(context.args[0])
-    except ValueError:
-        await update.effective_message.reply_text("ID стола должен быть числом")
-        return
-
-    table = db.get_visible_table(table_id)
+    table = db.get_table(chat_id=update.effective_message.chat_id)
     if not table:
-        await update.effective_message.reply_text(f"Стол {table_id} не найден")
-        logger.info(f"Стол {table_id} не найден")
+        await update.effective_message.reply_text(f"У чата не указан стол, используйте /set_chat")
         return
 
-    games = table.unfinished_games()
-    if not games:
-        await update.effective_message.reply_text(f"Нет неначатых игр за столом {table_id}")
-        logger.info(f"Нет игр за столом {table_id}")
+    game = db.get_table_first_game(table_id=table.table_id)
+    if not game:
+        await update.effective_message.reply_text(f"Нет неначатых игр за столом {table.name}")
+        logger.info(f"Нет игр за столом {table.name}")
         return
 
-    if len(games) > 1 and len(table.players()) > 4:
-        await update.effective_message.reply_text(
-            "Запуск игр для столов с >4 игроками доступен только через /start_game game_id.\n"
-            "Используйте /table_info table_id для нахождения game_id нужной игры"
-        )
-        logger.info(f"Попытка запуска стола с >4 игроками через /start_table: {table_id}")
+    game_string = db.get_game_string(game_id=game.game_id)
+    await update.message.reply_text(game_string, reply_markup=ready_button_reply_markup)
+
+
+async def ready_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    chat = query.message.chat
+    chat_id = chat.id
+    data = query.data[2:]
+    await query.answer()
+    if data == "Cancel":
+        await query.edit_message_text(text=f"Отменено")
         return
-
-    game = games[0]
-    success, message = await start_game_with_players(context, game.game_id)
-
-    if success:
-        await update.effective_message.set_reaction("👍")
-    else:
-        assert message
-        await update.effective_message.reply_text(message)
-        logger.info(f"Ошибка запуска игры: {message}")
-
-
-async def start_game_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Запускает конкретную игру по ID (только для админов)"""
+    status = data
     user = update.effective_user
-    assert user
-    assert update.effective_message
-    logger.info("User %s (%s) issued /start_game command with args: %s", user.username, user.id, context.args)
-    if not is_admin(user.id):
-        await update.effective_message.reply_text("Эта команда доступна только администраторам")
+    player = db.get_player(telegram_id=user.id)
+    table = db.get_table(chat_id=chat_id)
+    game = db.get_table_first_game(table_id=table.table_id)
+    if not game:
+        await query.edit_message_text(text=f"Все игры за столом сыграны")
         return
-
-    if not context.args or len(context.args) != 1:
-        await update.effective_message.reply_text("Использование: /start_game <game_id>")
-        return
-
-    try:
-        game_id = int(context.args[0])
-    except ValueError:
-        await update.effective_message.reply_text("ID игры должен быть числом")
-        return
-
-    success, message = await start_game_with_players(context, game_id)
-
-    if success:
-        await update.effective_message.set_reaction("👍")
-    elif message:
-        await update.effective_message.reply_text(message)
+    if status == "Ready":
+        db.set_player_ready(player.p_id)
+    else:
+        db.set_player_unready(player.p_id)
+    msg = db.get_game_string(game_id=game.game_id)
+    await query.edit_message_text(text=msg, reply_markup=ready_button_reply_markup)
+    rdy = db.check_game_ready(game_id=game.game_id)
+    if rdy:
+        player_nicks = [p.tenhou_name for p in game.players()]
+        result, missed_players, success = tenhou_client.start_game(player_nicks)
+        if success:
+            db.set_game_status(game.game_id, 1)
+            seat_winds_names = ["東", "南", "西", "北"]
+            text = f"Игра за столом {game.table.name} запущена:"
+            for i, p in enumerate(game.players):
+                text += f"\n{seat_winds_names[i]} {p.irl_name} ({p.tenhou_name})"
+            await context.bot.send_message(
+                chat_id="@kawaleague",
+                text=text
+            )
+            logger.info(f"Игра за столом {game.table.name} успешно запущена")
+            await query.edit_message_text(text="Приятной игры!")
+        elif result == "MEMBER NOT FOUND":
+            for nick in missed_players:
+                p = db.get_player(tenhou_name=nick)
+                db.set_player_unready(p.p_id)
+            msg = db.get_game_string(game_id=game.game_id)
+            await query.edit_message_text(text=msg, reply_markup=ready_button_reply_markup)
+            await query.message.chat.send_message(text=f"Игроки не в лобби: {', '.join(missed_players)}, статус готовности обновлён.")
+        else:
+            await query.message.chat.send_message(text=f"Не удалось запустить игру: {result}")
 
 
 async def next_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -275,41 +236,36 @@ async def notify_table_revealed(bot: Bot, table):
 async def set_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обновляет статус игры (только для администраторов)."""
     user = update.effective_user
-    assert user
-    assert update.effective_message
 
-    if not context.args or len(context.args) != 3:
+    table = db.get_table(chat_id=update.effective_message.chat_id)
+    if not table:
+        await update.effective_message.reply_text(f"У чата не указан стол, используйте /set_chat")
+        return
+
+    if not context.args or len(context.args) != 2:
         await update.effective_message.reply_text(
-            "Использование: /set_time <стол> <день> <время>\n"
+            "Использование: /set_time <день> <время>\n"
             "День вводить без месяца, только само число.\n"
             "Время можно указывать как с минутами, так и без. При указании с минутами, разделитель не обязателен.\n"
-            "Пример: 10 стол в 19:30 20 числа - /set_time 10 20 1930\n"
-            "15 стол в 17:00 10 числа - /set_time 15 10 17"
+            "Пример: 19:30 20 числа - /set_time 20 1930\n"
+            "17:00 10 числа - /set_time 10 17"
         )
         return
 
-    table_id, day, chosen_time = context.args
-    table_id = int(table_id)
-    table = db.get_visible_table(table_id)
-
-    if not table:
-        await update.effective_message.reply_text(f"Стол {table_id} не найден.")
-        logger.info("Table %s not found.", table_id)
-        return
+    day, chosen_time = context.args
 
     games = table.unfinished_games
     if not games:
-        await update.effective_message.reply_text(f"Нет неначатых игр за столом {table_id}.")
-        logger.info("No unstarted games at table %s.", table_id)
+        await update.effective_message.reply_text(f"Нет неначатых игр за столом {table.name}.")
+        logger.info("No unstarted games at table %s.", table.name)
         return
 
     player = db.get_player(telegram_id=user.id)
-    if player not in table.players:
+    if player not in table.players():
         await update.effective_message.reply_text(f"Указывать время можно только за своим столом.")
         logger.info(f"{user.name} attempted using set_time with args {[context.args]}. Not found at table")
         return
     day = int(day)
-    table_id = int(table_id)
     timezone = pytz.timezone("Europe/Moscow")
     now = datetime.datetime.now(tz=timezone)
     time_digits = ''.join(ch for ch in chosen_time if ch.isdigit())
@@ -334,7 +290,7 @@ async def set_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"{user.name} attempted using set_time with args {[context.args]}. Invalid time: {year}.{month}.{day} {hour}:{minute}")
         await update.effective_message.reply_text(f"Время не распознано {year}.{month}.{day} {hour}:{minute}")
         return
-    db.set_table_time(table_id=table_id, timestamp=int(prospective_start.timestamp()))
+    db.set_table_time(table_id=table.table_id, timestamp=int(prospective_start.timestamp()))
     logger.info(f"{user.name} used set_time with args {[context.args]}. Time set: {year}.{month}.{day} {hour}:{minute}")
     await update.effective_message.reply_text(f"Время установлено: {prospective_start.strftime('%d.%m %H:%M')}")
     return
@@ -343,31 +299,19 @@ async def set_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def remove_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обновляет статус игры (только для администраторов)."""
     user = update.effective_user
-    assert user
-    assert update.effective_message
 
-    if not context.args or len(context.args) != 1:
-        await update.effective_message.reply_text(
-            "Использование: /remove_time <стол>"
-        )
-        return
-
-    table_id = context.args[0]
-    table_id = int(table_id)
-    table = db.get_visible_table(table_id)
-
+    table = db.get_table(chat_id=update.effective_message.chat_id)
     if not table:
-        await update.effective_message.reply_text(f"Стол {table_id} не найден.")
-        logger.info("Table %s not found.", table_id)
+        await update.effective_message.reply_text(f"У чата не указан стол, используйте /set_chat")
         return
 
     player = db.get_player(telegram_id=user.id)
-    if player not in table.players and not is_admin(user.id):
+    if player not in table.players() and not is_admin(user.id):
         await update.effective_message.reply_text(f"Удалять время можно только за своим столом.")
         logger.info(f"{user.name} attempted using remove_time with args {[context.args]}. Not found at table")
         return
-    db.set_table_time(table_id=table_id, timestamp=0)
-    logger.info(f"{user.name} used remove_time with args {[context.args]}.")
+    db.set_table_time(table_id=table.table_id, timestamp=0)
+    logger.info(f"{user.name} used remove_time for table {[table.table_id]}.")
     await update.effective_message.reply_text(f"Время удалено.")
     return
 
@@ -386,7 +330,7 @@ async def timetable_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     cutoff = now - datetime.timedelta(hours=3)
     tables = db.get_unfinished_visible_tables()
     tables.sort(key=lambda el: el.table_id)
-    unknown_ids = [table.table_id for table in tables if not table.time or table.time < cutoff.timestamp()]
+    unknown_ids = [table.name for table in tables if not table.time or table.time < cutoff.timestamp()]
     known = [table for table in tables if table.time and table.time >= cutoff.timestamp()]
     known.sort(key=lambda el: el.time)
     known_str = "".join([table_string(i, explicit=True) for i in known])
@@ -498,15 +442,15 @@ def timestring_from_timestamp(timestamp: int, weekday=False, day=False) -> str:
 
 
 def table_string(table, mention: bool = False, explicit=True) -> str:
-    ans = timestring_from_timestamp(table.time, weekday=explicit, day=explicit) + " - " + f"Стол {table.table_id}:\n"
-    for i, player in enumerate(table.players):
+    ans = timestring_from_timestamp(table.time, weekday=explicit, day=explicit) + " - " + f"Стол {table.name}:\n"
+    for i, player in enumerate(table.players()):
         if mention:
             ans += player.clean_mention()
         else:
             ans += player.irl_name
         if i % 2 == 0:
             ans += ", "
-        elif i < len(table.players) - 1:
+        elif i < len(table.players()) - 1:
             ans += ",\n"
         else:
             ans += ".\n\n"
@@ -638,7 +582,7 @@ async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_T
 
     message = f"Стол {table.table_id}\n" \
               f"{'Стол скрыт 🔒' if not table.visible else ''}\n"
-    for i in table.players:
+    for i in table.players():
         message += f"{i.irl_name} ({i.dirty_mention()})\n"
     message += f"Сыграно: {len(table.games) - len(table.unfinished_games)} из {len(table.games)} игр\n"
     if table.time:
@@ -649,7 +593,7 @@ async def get_table_info_command(update: Update, context: ContextTypes.DEFAULT_T
     for game in games:
         message += f"ID игры: {game.game_id}\n" \
                    f"{'🟢 Запущена' if game.started else '🔴 Не запущена'}\n"
-        for player in game.players:
+        for player in game.players():
             message += f"{player.irl_name}\n"
         message += f"\n"
 
@@ -788,3 +732,65 @@ async def seating_image_command(update: Update, context: ContextTypes.DEFAULT_TY
     with open("seating.png", "rb") as image_file:
         await update.effective_message.reply_document(document=image_file)
 
+
+async def chat_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    chat = query.message.chat
+    chat_id = chat.id
+    data = query.data[2:]
+    if data == "Cancel":
+        await query.answer()
+        await query.edit_message_text(text=f"Отменено")
+    table_name = data
+    table = db.get_table(table_name=table_name)
+    db.set_table_chat(table.table_id, chat_id)
+    await query.answer()
+    await query.edit_message_text(text=f"Выбран стол {table_name}")
+    try:
+        await chat.set_title(f"Кава стол {table_name}")
+    except Exception as e:
+        logger.error(e)
+    try:
+        link = await context.bot.create_chat_invite_link(chat_id=chat_id)
+    except Exception as e:
+        await chat.send_message(f"Ошибка.")
+        logger.error(e)
+        return
+    for player in table.players():
+        try:
+            await chat.get_member(player.telegram_id)
+        except TelegramError as e:
+            try:
+                await context.bot.send_message(chat_id=player.telegram_id, text=f"Чат стола {table_name}:\n{link.invite_link}")
+                await chat.send_message(f"Ссылка отправлена {player.irl_name}.")
+            except Exception as e:
+                await chat.send_message(f"Не удалось пригласить игрока {player.irl_name}.")
+                logger.error(e)
+
+
+async def set_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_message.chat.type != "group":
+        await update.effective_message.reply_text(f"Доступно только в группах.")
+        return
+    member = await update.effective_message.chat.get_member(context.bot.id)
+    if member.status != "administrator":
+        await update.effective_message.reply_text(f"Сначала назначьте боту права администратора.")
+        return
+    user = update.effective_user
+    logger.info(f"Пользователь {user.username} ({user.id}) вызвал /set_chat в чате {update.effective_message.chat.id}")
+    t = db.get_table(chat_id=update.effective_message.chat.id)
+    if t:
+        await update.effective_message.reply_text(f"У этого чата уже есть стол {t.name}.")
+        return
+    player = db.get_player(telegram_id=user.id)
+    if not player:
+        await update.effective_message.reply_text(f"Вы не зарегистрированы.")
+        return
+    table_names = [table.name for table in player.visible_tables() if table.chat_id == 0]
+    if not table_names:
+        await update.effective_message.reply_text(f"У вас нет нераскрытых столов.")
+    keyboard = [[
+        InlineKeyboardButton(t_n, callback_data="TC"+t_n)
+    ] for t_n in table_names]+[[InlineKeyboardButton("Отмена", callback_data="TCCancel")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("Выберите стол", reply_markup=reply_markup)

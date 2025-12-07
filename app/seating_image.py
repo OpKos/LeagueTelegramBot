@@ -31,17 +31,17 @@ def create_seating_image(db: SqlParser, event: models.Event):
     image = Image.new(mode="RGBA", size=(width,height), color=bg_color)
     d = ImageDraw.Draw(image)
 
-    top = row_h+10
-    center = inter_gap+block_w//2+100
+    top = inter_gap
+    center = inter_gap+block_w//2
     for i, table in enumerate(tables):
         grid_x = i//grid_h
         grid_y = i-grid_x*grid_h
         if grid_y == 0 and i > 0:
-            top = row_h+10
+            top = inter_gap
             center += block_w+inter_gap+30
         table_h = row_h * (len(table.players())+1) + gap*2
         if grid_x == grid_w-1 and grid_y == 0:
-            true_w = center+block_w//2+100
+            true_w = center+block_w//2+inter_gap
         d.rounded_rectangle(xy=(center-block_w/2, top, center+block_w/2, top+table_h), outline=kawa_blue, width=4, radius=14)
         top += gap
         text_color = kawa_yellow
@@ -52,7 +52,7 @@ def create_seating_image(db: SqlParser, event: models.Event):
             top+=row_h
         top += inter_gap+gap
         if grid_y == grid_h-1 and grid_x == 0:
-            true_h = top+row_h
+            true_h = top
 
     image = image.crop((0, 0, true_w, true_h))
 

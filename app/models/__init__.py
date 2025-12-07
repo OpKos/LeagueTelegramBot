@@ -6,3 +6,4 @@ from .game import *
 from .game_player import *
 from .event import *
 from .event_player import *
+from .ready_player import *

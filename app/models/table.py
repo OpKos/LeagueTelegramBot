@@ -11,6 +11,7 @@ class Table(Base):
     visible: Mapped[int] = mapped_column(insert_default=0)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.event_id"))
     time: Mapped[int] = mapped_column(insert_default=0)
+    chat_id: Mapped[int] = mapped_column(sqlalchemy.BigInteger, insert_default=0, server_default=sqlalchemy.text("0"))
     reveal_cached: Mapped[int] = mapped_column(insert_default=0, server_default=sqlalchemy.text("0"))
     event: Mapped["Event"] = relationship(back_populates="tables", lazy="subquery")
     games: Mapped[list["Game"]] = relationship(back_populates="table", lazy="subquery")

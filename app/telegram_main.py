@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from other_bot_functions import *
 
 def main() -> None:
@@ -12,10 +12,8 @@ def main() -> None:
 
     application.add_handler(CommandHandler("register", register_command))
     application.add_handler(CommandHandler("start_table", start_table_command))
-    application.add_handler(CommandHandler("start_game", start_game_command))
     application.add_handler(CommandHandler("next_table", next_table_command))
     application.add_handler(CommandHandler("update_game_status", update_game_status_command))
-    application.add_handler(CommandHandler("reload_db", reload_session_command))
     application.add_handler(CommandHandler("get_settings", get_settings_command))
     application.add_handler(CommandHandler("get_logs", get_logs_command))
     application.add_handler(CommandHandler("force_reveal", force_reveal_command))
@@ -35,6 +33,10 @@ def main() -> None:
     application.add_handler(CommandHandler("all_tables", all_tables_command))
     application.add_handler(CommandHandler("reveal_new_tables", reveal_new_tables))
     application.add_handler(CommandHandler("seating_image", seating_image_command))
+    application.add_handler(CommandHandler("set_chat", set_chat))
+
+    application.add_handler(CallbackQueryHandler(chat_button, pattern=r"^TC"))
+    application.add_handler(CallbackQueryHandler(ready_button, pattern=r"^RB"))
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

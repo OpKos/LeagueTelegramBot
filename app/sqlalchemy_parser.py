@@ -101,7 +101,11 @@ class SqlParser:
     def get_game(self, game_id: int):
         return self.session.get(models.Game, game_id)
 
-    def get_table(self, table_id: int):
+    def get_table(self, table_id: int = None, table_name: str = None, chat_id: int = None):
+        if table_name:
+            return self.session.query(models.Table).filter(models.Table.name == table_name).first()
+        if chat_id:
+            return self.session.query(models.Table).filter(models.Table.chat_id == chat_id).first()
         return self.session.get(models.Table, table_id)
 
     def get_event(self, event_id: int):
@@ -179,6 +183,28 @@ class SqlParser:
         if player:
             player.language = lang
             self.session.commit()
+            return True
+        return False
+
+    def check_player_ready(self, p_id: int):
+        rp = self.session.get(models.ReadyPlayer, p_id)
+        if rp:
+            return True
+        return False
+
+    def set_player_ready(self, p_id: int):
+        player = self.session.get(models.Player, p_id)
+        if player:
+            if not self.check_player_ready(p_id):
+                rp = models.ReadyPlayer(p_id=p_id)
+                self.session.add(rp)
+                self.session.commit()
+        return False
+
+    def set_player_unready(self, p_id: int):
+        self.session.query(models.ReadyPlayer).filter(models.ReadyPlayer.p_id==p_id).delete()
+        self.session.commit()
+        return True
 
     def get_signup_events(self):
         return self.session.query(models.Event).filter(models.Event.signup == 1).all()
@@ -193,3 +219,32 @@ class SqlParser:
 
     def get_event_cached_tables(self, event_id: int):
         return self.session.query(models.Table).filter(models.Table.event_id == event_id).filter(models.Table.reveal_cached == 1).all()
+
+    def set_table_chat(self, table_id: int, chat_id: int):
+        table = self.session.get(models.Table, table_id)
+        table.chat_id = chat_id
+        self.session.commit()
+
+    def get_game_string(self, game_id: int):
+        game = self.session.get(models.Game, game_id)
+        ans = []
+        for player in game.players():
+            res = "✅ " if self.check_player_ready(player.p_id) else "❌ "
+            res += player.irl_name
+            ans.append(res)
+        return "\n".join(ans)
+
+    def check_game_ready(self, game_id: int):
+        game = self.session.get(models.Game, game_id)
+        for player in game.players():
+            if not self.check_player_ready(player.p_id):
+                return False
+        return True
+
+    def get_table_first_game(self, table_id: int):
+        table = self.session.get(models.Table, table_id)
+        games = table.unfinished_games()
+        if games:
+            return games[0]
+        else:
+            return None
