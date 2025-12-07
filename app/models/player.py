@@ -18,10 +18,10 @@ class Player(Base):
     player_events: Mapped[list["EventPlayer"]] = relationship(back_populates="player", lazy="subquery")
 
     def visible_tables(self):
-        return [tp.table for tp in self.tables_seats if getattr(tp.table, "visible", 0) and tp.table.event.started == 1]
+        return [tp.table for tp in self.tables_seats if tp.table.visible == 1 and tp.table.event.started == 1]
 
     def invisible_tables(self):
-        return [tp.table for tp in self.tables_seats if not getattr(tp.table, "visible", 0) and tp.table.event.started == 1]
+        return [tp.table for tp in self.tables_seats if tp.table.visible == 0 and tp.table.event.started == 1]
 
     def all_tables(self):
         return [tp.table for tp in self.tables_seats if tp.table.event.started == 1]

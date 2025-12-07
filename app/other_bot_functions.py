@@ -789,6 +789,7 @@ async def set_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     table_names = [table.name for table in player.visible_tables() if table.chat_id == 0]
     if not table_names:
         await update.effective_message.reply_text(f"У вас нет нераскрытых столов.")
+        return
     keyboard = [[
         InlineKeyboardButton(t_n, callback_data="TC"+t_n)
     ] for t_n in table_names]+[[InlineKeyboardButton("Отмена", callback_data="TCCancel")]]
