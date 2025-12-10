@@ -5,9 +5,8 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 import pytz
-from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions
 from telegram.constants import ParseMode
-from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from sqlalchemy_parser import SqlParser
@@ -142,8 +141,10 @@ async def ready_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await query.edit_message_text(text=f"Все игры за столом сыграны")
         return
     if status == "Ready":
+        logger.info(f"User {user.username} pressed ready button")
         db.set_player_ready(player.p_id)
     else:
+        logger.info(f"User {user.username} pressed unready button")
         db.set_player_unready(player.p_id)
     msg = db.get_game_string(game_id=game.game_id)
     await query.edit_message_text(text=msg, reply_markup=ready_button_reply_markup)
@@ -151,6 +152,7 @@ async def ready_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if rdy:
         player_nicks = [p.tenhou_name for p in game.players()]
         result, missed_players, success = tenhou_client.start_game(player_nicks)
+        logger.info(f"Запуск игры за столом {game.table.name}: {result=}, {missed_players=}, {success=}")
         if success:
             db.set_game_status(game.game_id, 1)
             seat_winds_names = ["東", "南", "西", "北"]
@@ -177,7 +179,8 @@ async def ready_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def next_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    if not user or not update.effective_message:
+    if update.effective_message.chat.type != "private":
+        await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
         return
     logger.info("User %s (%s) issued /next_table command.", user.username, user.id)
     player = db.get_player(telegram_id=user.id)
@@ -200,7 +203,8 @@ async def next_table_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def all_tables_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    if not user or not update.effective_message:
+    if update.effective_message.chat.type != "private":
+        await update.effective_message.reply_text("Эта команда доступна только в личных сообщениях с ботом.")
         return
     logger.info("User %s (%s) issued /all_tables command.", user.username, user.id)
     player = db.get_player(telegram_id=user.id)
@@ -226,7 +230,7 @@ async def all_tables_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def notify_table_revealed(bot: Bot, table):
-    player_names = [p.irl_name for p in table.players]
+    player_names = [p.irl_name for p in table.players()]
     message = (
             f"Раскрыт стол {table.name}!\n" +
             '\n'.join(player_names) + "\n"
@@ -459,12 +463,11 @@ def table_string(table, mention: bool = False, explicit=True) -> str:
 
 
 async def send_game_status_message(context: ContextTypes.DEFAULT_TYPE) -> None:
-    started, total = db.get_games_status()
     now = datetime.datetime.now()
     tommorow: datetime.datetime = now + datetime.timedelta(days=1)
     tables = db.get_unfinished_visible_tables()
     started, total = db.get_games_status()
-    tables = [i for i in tables if i.time and i.time >= now.timestamp() and i.time < tommorow.timestamp()]
+    tables = [i for i in tables if i.time and now.timestamp() <= i.time < tommorow.timestamp()]
     tables.sort(key=lambda el: el.time)
     games = [table_string(table, mention=True, explicit=False) for table in tables]
     ans = f"Доброе утро, запущено игр: {started}/{total}"
@@ -612,7 +615,7 @@ async def lobby_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def pantheon_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     assert update.effective_message
     pantheon = config.get("Settings", "pantheon")
-    await update.effective_message.reply_text(pantheon)
+    await update.effective_message.reply_text(pantheon, parse_mode=ParseMode.HTML, link_preview_options=LinkPreviewOptions(is_disabled=True))
     return
 
 
@@ -771,7 +774,7 @@ async def chat_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 async def set_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_message.chat.type != "supergroup":
-        await update.effective_message.reply_text(f"Доступно только в супергруппах.")
+        await update.effective_message.reply_text(f"Доступно только в супергруппах. (В настройках группы включите историю чата для новых участников)")
         return
     member = await update.effective_message.chat.get_member(context.bot.id)
     if member.status != "administrator":
