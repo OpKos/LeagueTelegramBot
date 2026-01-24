@@ -1,8 +1,10 @@
-from PIL import Image, ImageDraw, ImageFont
-from sqlalchemy_parser import SqlParser
+from math import floor, sqrt
+
 from matplotlib import font_manager
-import models
-from math import sqrt, floor
+from PIL import Image, ImageDraw, ImageFont
+
+from . import models
+from .sqlalchemy_parser import SqlParser
 
 def create_seating_image(db: SqlParser, event: models.Event):
     name_font_file = font_manager.findfont("Jost", fallback_to_default=False)
@@ -57,4 +59,3 @@ def create_seating_image(db: SqlParser, event: models.Event):
     image = image.crop((0, 0, true_w, true_h))
 
     image.save("seating.png")
-

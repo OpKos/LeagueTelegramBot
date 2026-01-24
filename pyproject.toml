@@ -1,0 +1,22 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src"]
+exclude = ["app/alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+per-file-ignores = { "__init__.py" = ["F401"], "app/alembic/env.py" = ["F401"], "src/league_telegram_bot/telegram_main.py" = ["F403", "F405"] }
+
+[tool.ruff.lint.isort]
+known-first-party = ["league_telegram_bot"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = false
+strict_optional = false
+files = ["src"]

@@ -1,10 +1,11 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 import logging
 import random
 
-import settings
-import models
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from . import models
+from . import settings
 
 logger = logging.getLogger(__name__)
 

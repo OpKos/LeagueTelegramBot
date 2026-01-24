@@ -11,7 +11,8 @@ services:
     depends_on:
       - db
     volumes:
-      - ./app/:/app/
+      - ./app/:/app/app/
+      - ./src/:/app/src/
 
   db:
     ports:

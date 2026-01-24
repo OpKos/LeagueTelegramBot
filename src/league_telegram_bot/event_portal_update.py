@@ -1,7 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
-import models
-from sqlalchemy_parser import SqlParser
+
+from . import models
+from .sqlalchemy_parser import SqlParser
 
 def event_portal_update(db: SqlParser, event: models.Event):
     url = event.link
@@ -46,4 +47,3 @@ def event_portal_update(db: SqlParser, event: models.Event):
         else:
             res.append(f"player not found in database: {name}")
     return "\n".join(res)
-

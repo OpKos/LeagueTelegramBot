@@ -1,6 +1,6 @@
 import configparser
-import json
 import datetime
+import json
 import logging
 from logging.handlers import RotatingFileHandler
 
@@ -9,18 +9,18 @@ from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup, Li
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from sqlalchemy_parser import SqlParser
-from tenhou_parser import TenhouClient
+from .event_portal_update import event_portal_update
+from .paths import app_path
+from .seating_functions import create_seating
+from .seating_image import create_seating_image
+from .sqlalchemy_parser import SqlParser
+from .tenhou_parser import TenhouClient
 
-from event_portal_update import event_portal_update
-from seating_functions import create_seating
-from seating_image import create_seating_image
-
-with open("locales.json", "r", encoding="utf-8") as f:
+with open(app_path("locales.json"), "r", encoding="utf-8") as f:
     LOCALES = json.load(f)
 
 config = configparser.ConfigParser()
-config.read("config.ini")
+config.read(app_path("config.ini"))
 lobby = config.get("Settings", "lobby")
 db = SqlParser()
 tenhou_client = TenhouClient(lobby=lobby, game_type="0009", is_enable=True)
@@ -643,7 +643,7 @@ async def get_settings_command(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.effective_message.reply_text("Эта команда доступна только администраторам.")
         return
 
-    with open("config.ini", "rb") as settings_file:
+    with open(app_path("config.ini"), "rb") as settings_file:
         await update.effective_message.reply_document(document=settings_file)
     logger.info("Admin %s (%s) requested the settings file.", user.username, user.id)
 

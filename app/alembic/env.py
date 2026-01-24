@@ -1,17 +1,15 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
-from models.base import Base
-from models.game import Game
-from models.game_player import GamePlayer
-from models.player import Player
-from models.table import Table
-from models.table_player import TablePlayer
-import settings as settings
+from league_telegram_bot import settings
+from league_telegram_bot.models.base import Base
+from league_telegram_bot.models.game import Game
+from league_telegram_bot.models.game_player import GamePlayer
+from league_telegram_bot.models.player import Player
+from league_telegram_bot.models.table import Table
+from league_telegram_bot.models.table_player import TablePlayer
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -37,6 +35,7 @@ url = f"postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{sett
 
 config.set_main_option("sqlalchemy.url", url)
 
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -49,9 +48,6 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-
-
-
 
     context.configure(
         url=url,
@@ -78,9 +74,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

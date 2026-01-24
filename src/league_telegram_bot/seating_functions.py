@@ -1,8 +1,9 @@
-import random
-import models
 import csv
+import random
 
-from sqlalchemy_parser import SqlParser
+from . import models
+from .paths import app_path
+from .sqlalchemy_parser import SqlParser
 
 FOUR_SEAT_ORDERS = [
     [0, 1, 2, 3],  # ABCD
@@ -16,7 +17,7 @@ def create_seating(db: SqlParser, event: models.Event):
     n = len(players)
     random.shuffle(players)
     seating: list[list[int]] = []
-    with open(f'seating_files/best_N{n}.csv', 'r') as csvfile:
+    with open(app_path("seating_files", f"best_N{n}.csv"), "r") as csvfile:
         seating_file = csv.reader(csvfile, delimiter=',')
         for row in seating_file:
             random.shuffle(row)
@@ -36,7 +37,6 @@ def create_seating(db: SqlParser, event: models.Event):
                 table_id=table.table_id,
                 players=game_order
             )
-
 
 
 
