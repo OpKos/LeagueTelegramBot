@@ -1,7 +1,15 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from .base import Base
-from .table import Table
+
+if TYPE_CHECKING:
+    from .game_player import GamePlayer
+    from .table import Table
 
 
 class Game(Base):
@@ -9,8 +17,8 @@ class Game(Base):
     game_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     table_id: Mapped[int] = mapped_column(ForeignKey("tables.table_id"))
     started: Mapped[int] = mapped_column(insert_default=0)
-    table: Mapped["Table"] = relationship(back_populates="games", lazy="subquery")
-    players_seats: Mapped[list["GamePlayer"]] = relationship(back_populates="game", lazy="subquery")
+    table: Mapped[Table] = relationship(back_populates="games", lazy="subquery")
+    players_seats: Mapped[list[GamePlayer]] = relationship(back_populates="game", lazy="subquery")
 
     def players(self):
         self.players_seats.sort(key=lambda p: p.seat)

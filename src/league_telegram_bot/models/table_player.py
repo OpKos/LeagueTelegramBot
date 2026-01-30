@@ -1,8 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import relationship, mapped_column, Mapped
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from .base import Base
-from .table import Table
-from .player import Player
+
+if TYPE_CHECKING:
+    from .player import Player
+    from .table import Table
+
 
 class TablePlayer(Base):
     __tablename__ = "table_player_a"

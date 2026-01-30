@@ -1,9 +1,19 @@
-from .table import *
-from .player import *
-from .table import *
-from .table_player import *
-from .game import *
-from .game_player import *
-from .event import *
-from .event_player import *
-from .ready_player import *
+from .event import Event
+from .event_player import EventPlayer
+from .game import Game
+from .game_player import GamePlayer
+from .player import Player
+from .ready_player import ReadyPlayer
+from .table import Table
+from .table_player import TablePlayer
+
+__all__ = [
+    "Event",
+    "EventPlayer",
+    "Game",
+    "GamePlayer",
+    "Player",
+    "ReadyPlayer",
+    "Table",
+    "TablePlayer",
+]

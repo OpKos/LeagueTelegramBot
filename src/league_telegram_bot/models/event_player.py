@@ -1,6 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, text
-from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from .base import Base
+
+if TYPE_CHECKING:
+    from .event import Event
+    from .player import Player
+
 
 class EventPlayer(Base):
     __tablename__ = "event_player_a"
@@ -8,8 +18,8 @@ class EventPlayer(Base):
     p_id: Mapped[int] = mapped_column(ForeignKey("players.p_id"), primary_key=True)
     table_minimum: Mapped[int] = mapped_column(insert_default=0, server_default=text("0"))
     reveal_enabled: Mapped[int] = mapped_column(insert_default=1, server_default=text("1"))
-    event: Mapped["Event"] = relationship(back_populates="event_players", lazy="subquery")
-    player: Mapped["Player"] = relationship(back_populates="player_events", lazy="subquery")
+    event: Mapped[Event] = relationship(back_populates="event_players", lazy="subquery")
+    player: Mapped[Player] = relationship(back_populates="player_events", lazy="subquery")
 
     def tables(self):
         return [table for table in self.event.tables if self.player in table.players()]

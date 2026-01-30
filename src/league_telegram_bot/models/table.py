@@ -1,7 +1,17 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import sqlalchemy
-from sqlalchemy.orm import relationship, mapped_column, Mapped
 from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from .base import Base
+
+if TYPE_CHECKING:
+    from .event import Event
+    from .game import Game
+    from .table_player import TablePlayer
 
 
 class Table(Base):
@@ -11,11 +21,15 @@ class Table(Base):
     visible: Mapped[int] = mapped_column(insert_default=0)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.event_id"))
     time: Mapped[int] = mapped_column(insert_default=0)
-    chat_id: Mapped[int] = mapped_column(sqlalchemy.BigInteger, insert_default=0, server_default=sqlalchemy.text("0"))
-    reveal_cached: Mapped[int] = mapped_column(insert_default=0, server_default=sqlalchemy.text("0"))
-    event: Mapped["Event"] = relationship(back_populates="tables", lazy="subquery")
-    games: Mapped[list["Game"]] = relationship(back_populates="table", lazy="subquery")
-    players_seats: Mapped[list["TablePlayer"]] = relationship(back_populates="table", lazy="subquery")
+    chat_id: Mapped[int] = mapped_column(
+        sqlalchemy.BigInteger, insert_default=0, server_default=sqlalchemy.text("0")
+    )
+    reveal_cached: Mapped[int] = mapped_column(
+        insert_default=0, server_default=sqlalchemy.text("0")
+    )
+    event: Mapped[Event] = relationship(back_populates="tables", lazy="subquery")
+    games: Mapped[list[Game]] = relationship(back_populates="table", lazy="subquery")
+    players_seats: Mapped[list[TablePlayer]] = relationship(back_populates="table", lazy="subquery")
 
     def unfinished_games(self):
         return [g for g in self.games if g.started == 0]

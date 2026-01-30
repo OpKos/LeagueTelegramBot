@@ -1,6 +1,8 @@
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
+
 from .base import Base
+
 
 class ReadyPlayer(Base):
     __tablename__ = "ready_players"

@@ -1,7 +1,16 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import sqlalchemy
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
+
+if TYPE_CHECKING:
+    from .event_player import EventPlayer
+    from .game_player import GamePlayer
+    from .table_player import TablePlayer
 
 
 class Player(Base):
@@ -13,15 +22,25 @@ class Player(Base):
     irl_name: Mapped[str] = mapped_column(nullable=True)
     full_ready: Mapped[int] = mapped_column(insert_default=0, server_default=sqlalchemy.text("0"))
     language: Mapped[str] = mapped_column(insert_default="ru", server_default="ru")
-    games_seats: Mapped[list["GamePlayer"]] = relationship(back_populates="player", lazy="subquery")
-    tables_seats: Mapped[list["TablePlayer"]] = relationship(back_populates="player", lazy="subquery")
-    player_events: Mapped[list["EventPlayer"]] = relationship(back_populates="player", lazy="subquery")
+    games_seats: Mapped[list[GamePlayer]] = relationship(back_populates="player", lazy="subquery")
+    tables_seats: Mapped[list[TablePlayer]] = relationship(back_populates="player", lazy="subquery")
+    player_events: Mapped[list[EventPlayer]] = relationship(
+        back_populates="player", lazy="subquery"
+    )
 
     def visible_tables(self):
-        return [tp.table for tp in self.tables_seats if tp.table.visible == 1 and tp.table.event.started == 1]
+        return [
+            tp.table
+            for tp in self.tables_seats
+            if tp.table.visible == 1 and tp.table.event.started == 1
+        ]
 
     def invisible_tables(self):
-        return [tp.table for tp in self.tables_seats if tp.table.visible == 0 and tp.table.event.started == 1]
+        return [
+            tp.table
+            for tp in self.tables_seats
+            if tp.table.visible == 0 and tp.table.event.started == 1
+        ]
 
     def all_tables(self):
         return [tp.table for tp in self.tables_seats if tp.table.event.started == 1]
@@ -33,7 +52,7 @@ class Player(Base):
         """
         Only works with ParseMode.HTML
         """
-        return f"<a href=\'tg://user?id={self.telegram_id}\'>{self.irl_name}</a>"
+        return f"<a href='tg://user?id={self.telegram_id}'>{self.irl_name}</a>"
 
     def __str__(self):
         return self.irl_name or self.telegram_name

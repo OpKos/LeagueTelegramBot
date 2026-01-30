@@ -7,7 +7,7 @@ exclude = ["app/alembic/versions"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
-per-file-ignores = { "__init__.py" = ["F401"], "app/alembic/env.py" = ["F401"], "src/league_telegram_bot/telegram_main.py" = ["F403", "F405"] }
+per-file-ignores = { "__init__.py" = ["F401"], "app/alembic/env.py" = ["F401"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["league_telegram_bot"]

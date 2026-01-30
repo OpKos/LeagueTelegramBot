@@ -4,22 +4,20 @@ from bs4 import BeautifulSoup
 from . import models
 from .sqlalchemy_parser import SqlParser
 
+
 def event_portal_update(db: SqlParser, event: models.Event):
     url = event.link
 
     response = requests.get(url)
     data = response.text
 
-    soup = BeautifulSoup(data, 'html.parser')
+    soup = BeautifulSoup(data, "html.parser")
     table = soup.find(class_="table table-hover mt-4")
     players = table.find_all("tr")
     data = []
     for p in players[1:]:
-        if p.has_attr('class'):
-            success = 1
-        else:
-            success = 0
-        name_obj, city_obj, nick_obj = p.find_all('td')[:3]
+        success = 1 if p.has_attr("class") else 0
+        name_obj, city_obj, nick_obj = p.find_all("td")[:3]
         if name_obj.find(class_="d-none d-print-block"):
             name = name_obj.find(class_="d-none d-print-block").contents[0]
         else:
@@ -39,11 +37,10 @@ def event_portal_update(db: SqlParser, event: models.Event):
             db.fill_player_data(player.p_id, name)
             res.append(f"player updated in database: {name}")
             if include:
-                if player.full_ready == 1:
-                    table_minimum = 10000
-                else:
-                    table_minimum = 0
-                db.add_event_player(event_id=event.event_id, player_id=player.p_id, table_minimum=table_minimum)
+                table_minimum = 10000 if player.full_ready == 1 else 0
+                db.add_event_player(
+                    event_id=event.event_id, player_id=player.p_id, table_minimum=table_minimum
+                )
         else:
             res.append(f"player not found in database: {name}")
     return "\n".join(res)

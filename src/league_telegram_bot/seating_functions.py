@@ -12,13 +12,14 @@ FOUR_SEAT_ORDERS = [
     [3, 2, 1, 0],  # DCBA
 ]
 
+
 def create_seating(db: SqlParser, event: models.Event):
     players = event.players()
     n = len(players)
     random.shuffle(players)
     seating: list[list[int]] = []
-    with open(app_path("seating_files", f"best_N{n}.csv"), "r") as csvfile:
-        seating_file = csv.reader(csvfile, delimiter=',')
+    with open(app_path("seating_files", f"best_N{n}.csv")) as csvfile:
+        seating_file = csv.reader(csvfile, delimiter=",")
         for row in seating_file:
             random.shuffle(row)
             seating.append([int(i) for i in row])
@@ -26,18 +27,9 @@ def create_seating(db: SqlParser, event: models.Event):
     tables = [[players[i] for i in j] for j in seating]
     for number, table_order in enumerate(tables, 1):
         table = db.create_table_with_players(
-            event_id=event.event_id,
-            table_name=event.name+str(number),
-            players=table_order
+            event_id=event.event_id, table_name=event.name + str(number), players=table_order
         )
         orders = FOUR_SEAT_ORDERS
         for order in orders:
             game_order = [table_order[order[i]] for i in range(len(table_order))]
-            db.create_game_with_players(
-                table_id=table.table_id,
-                players=game_order
-            )
-
-
-
-
+            db.create_game_with_players(table_id=table.table_id, players=game_order)

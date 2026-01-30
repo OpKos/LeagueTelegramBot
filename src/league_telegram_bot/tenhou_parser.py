@@ -1,11 +1,10 @@
 from io import BytesIO
+from urllib.parse import quote_plus, unquote
 
 import pycurl
-from urllib.parse import unquote, quote_plus
 
-import random
 
-class TenhouClient():
+class TenhouClient:
     def __init__(self, lobby, game_type, is_enable):
         self.is_enable = is_enable
         self.lobby = lobby
@@ -25,7 +24,7 @@ class TenhouClient():
         headers = [
             "Origin: https://tenhou.net",
             "Content-Type: text/plain;charset=UTF-8",
-            "Referer: https://tenhou.net/cs/edit/?{}".format(self.lobby),
+            f"Referer: https://tenhou.net/cs/edit/?{self.lobby}",
         ]
 
         data = f"L={self.lobby}"
@@ -45,8 +44,11 @@ class TenhouClient():
             response = buffer.getvalue()
             result = unquote(response.decode("utf-8"))
             # 'IDLE=NoNameA,FrozenM&PLAY=...'
-            waited_players = \
-                [x.strip() for x in result[result.index('IDLE=') + 5:result.index('&PLAY')].split(",") if x]
+            waited_players = [
+                x.strip()
+                for x in result[result.index("IDLE=") + 5 : result.index("&PLAY")].split(",")
+                if x
+            ]
             return waited_players, True
         except Exception as e:
             return str(e), False
@@ -61,7 +63,7 @@ class TenhouClient():
         headers = [
             "Origin: https://tenhou.net",
             "Content-Type: text/plain;charset=UTF-8",
-            "Referer: https://tenhou.net/cs/edit/?{}".format(self.lobby),
+            f"Referer: https://tenhou.net/cs/edit/?{self.lobby}",
         ]
 
         data = f"L={self.lobby}&R2={self.game_type}&M={players}&RND=default&WG=1&PW="
@@ -87,5 +89,5 @@ class TenhouClient():
                 return "MEMBER NOT FOUND", missed_player_ids, False
             elif result.startswith("OK"):
                 return "STARTED", [], True
-        except Exception as e:
+        except Exception:
             return "EXCEPTION", [], False
