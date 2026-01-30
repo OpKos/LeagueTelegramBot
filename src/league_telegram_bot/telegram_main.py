@@ -26,51 +26,28 @@ def build_application(token: str, handlers: BotHandlers) -> Application:
         .build()
     )
 
-    application.add_handler(CommandHandler("register", handlers.register_command))
-    application.add_handler(CommandHandler("set_language", handlers.set_language))
-    application.add_handler(
-        CommandHandler(["player_info", "my_games"], handlers.get_player_info_command)
-    )
-
-    application.add_handler(CommandHandler("set_chat", handlers.set_chat))
-
-    application.add_handler(CommandHandler("start_table", handlers.start_table_command))
-
-    application.add_handler(CommandHandler("next_table", handlers.next_table_command))
-    application.add_handler(CommandHandler("all_tables", handlers.all_tables_command))
-
-    application.add_handler(CommandHandler("set_time", handlers.set_time_command))
-    application.add_handler(CommandHandler("remove_time", handlers.remove_time_command))
-    application.add_handler(CommandHandler("timetable", handlers.timetable_command))
-
-    application.add_handler(CommandHandler("get_settings", handlers.get_settings_command))
-    application.add_handler(CommandHandler("get_logs", handlers.get_logs_command))
-
-    application.add_handler(CommandHandler("lobby", handlers.lobby_command))
-    application.add_handler(CommandHandler("pantheon", handlers.pantheon_command))
-
-    application.add_handler(
-        CommandHandler("update_game_status", handlers.update_game_status_command)
-    )
-    application.add_handler(CommandHandler("force_reveal", handlers.force_reveal_command))
-    application.add_handler(CommandHandler("table_info", handlers.get_table_info_command))
-
-    application.add_handler(
-        CommandHandler("start_status_message", handlers.start_status_message_command)
-    )
-    application.add_handler(CommandHandler("status", handlers.status_command))
-
-    application.add_handler(
-        CommandHandler("update_event_players", handlers.update_event_players_command)
-    )
-    application.add_handler(CommandHandler("create_seating", handlers.create_seating_command))
-    application.add_handler(CommandHandler("reveal_new_tables", handlers.reveal_new_tables))
-    application.add_handler(CommandHandler("seating_image", handlers.seating_image_command))
-
-    application.add_handler(CallbackQueryHandler(handlers.chat_button, pattern=r"^TC"))
-    application.add_handler(CallbackQueryHandler(handlers.ready_button, pattern=r"^RB"))
+    register_handlers(application, handlers)
 
     return application
+
+
+def register_handlers(application: Application, handlers: BotHandlers) -> None:
+    for name, spec in handlers.iter_handler_specs():
+        callback = getattr(handlers, name)
+        if spec.kind == "command":
+            if not spec.commands:
+                raise ValueError(f"Missing commands for handler {name}")
+            commands = list(spec.commands)
+            application.add_handler(
+                CommandHandler(commands if len(commands) > 1 else commands[0], callback)
+            )
+            continue
+        if spec.kind == "callback_query":
+            if spec.pattern is None:
+                raise ValueError(f"Missing pattern for callback handler {name}")
+            application.add_handler(CallbackQueryHandler(callback, pattern=spec.pattern))
+            continue
+        raise ValueError(f"Unknown handler spec kind: {spec.kind}")
 
 
 def main() -> None:

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import datetime
 import logging
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import ClassVar, Literal
 
 import pytz
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions, Update
@@ -69,7 +72,32 @@ def table_string(table, mention: bool = False, explicit: bool = True) -> str:
     return ans
 
 
+@dataclass(frozen=True)
+class HandlerSpec:
+    kind: Literal["command", "callback_query"]
+    commands: tuple[str, ...] = ()
+    pattern: str | None = None
+
+
+def command_handler(*commands: str):
+    def decorator(func):
+        func._handler_spec = HandlerSpec(kind="command", commands=commands)
+        return func
+
+    return decorator
+
+
+def callback_query_handler(pattern: str):
+    def decorator(func):
+        func._handler_spec = HandlerSpec(kind="callback_query", pattern=pattern)
+        return func
+
+    return decorator
+
+
 class BotHandlers:
+    _handler_attr: ClassVar[str] = "_handler_spec"
+
     def __init__(self, config: AppConfig, locales: dict[str, dict[str, str]]):
         self.db = SqlParser(database_url=config.database_url)
         self.tenhou_client = TenhouClient(lobby=config.lobby, game_type="0009", is_enable=True)
@@ -80,6 +108,13 @@ class BotHandlers:
         self.settings_path = config.config_path
         self._ready_button_reply_markup = ready_button_reply_markup
 
+    @classmethod
+    def iter_handler_specs(cls) -> Iterable[tuple[str, HandlerSpec]]:
+        for name, value in cls.__dict__.items():
+            spec = getattr(value, cls._handler_attr, None)
+            if spec is not None:
+                yield name, spec
+
     def is_admin(self, user_id: int) -> bool:
         """Проверяет, является ли пользователь администратором."""
         return user_id in self.admin_ids
@@ -88,6 +123,7 @@ class BotHandlers:
         template = self.locales.get(key).get(lang)
         return template.format(**kwargs)
 
+    @command_handler("register")
     async def register_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Регистрирует нового игрока в системе.
@@ -149,6 +185,7 @@ class BotHandlers:
             "User %s (%s) registered with Tenhou ID %s.", user.username, user.id, tenhou_name
         )
 
+    @command_handler("start_table")
     async def start_table_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
 
@@ -170,6 +207,7 @@ class BotHandlers:
         game_string = self.db.get_game_string(game_id=game.game_id)
         await update.message.reply_text(game_string, reply_markup=self._ready_button_reply_markup)
 
+    @callback_query_handler(pattern=r"^RB")
     async def ready_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         chat = query.message.chat
@@ -230,6 +268,7 @@ class BotHandlers:
             else:
                 await query.message.chat.send_message(text=f"Не удалось запустить игру: {result}")
 
+    @command_handler("next_table")
     async def next_table_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         if update.effective_message.chat.type != "private":
@@ -255,6 +294,7 @@ class BotHandlers:
                 await self.notify_table_revealed(context.bot, nt)
                 nt = self.db.try_reveal(ep.event_id)
 
+    @command_handler("all_tables")
     async def all_tables_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         if update.effective_message.chat.type != "private":
@@ -289,6 +329,7 @@ class BotHandlers:
         message = f"Раскрыт стол {table.name}!\n" + "\n".join(player_names) + "\n"
         await bot.send_message(chat_id="@kawaleague", text=message)
 
+    @command_handler("set_time")
     async def set_time_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Обновляет статус игры (только для администраторов)."""
         user = update.effective_user
@@ -382,6 +423,7 @@ class BotHandlers:
             f"Время установлено: {prospective_start.strftime('%d.%m %H:%M')}"
         )
 
+    @command_handler("remove_time")
     async def remove_time_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Обновляет статус игры (только для администраторов)."""
         user = update.effective_user
@@ -406,6 +448,7 @@ class BotHandlers:
         logger.info("%s used remove_time for table %s.", user.name, [table.table_id])
         await update.effective_message.reply_text("Время удалено.")
 
+    @command_handler("timetable")
     async def timetable_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         assert user
@@ -436,6 +479,7 @@ class BotHandlers:
             ans = "Игр нет"
         await update.effective_message.reply_text(ans, parse_mode=ParseMode.HTML)
 
+    @command_handler("update_game_status")
     async def update_game_status_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -490,6 +534,7 @@ class BotHandlers:
                 status,
             )
 
+    @command_handler("get_logs")
     async def get_logs_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Отправляет файл с логами администратору."""
         user = update.effective_user
@@ -513,6 +558,7 @@ class BotHandlers:
             await update.effective_message.reply_text(f"Произошла ошибка при отправке логов: {e}")
             logger.error("Error sending log file to admin %s (%s): %s", user.username, user.id, e)
 
+    @command_handler("force_reveal")
     async def force_reveal_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -556,6 +602,7 @@ class BotHandlers:
             ans += "\nСегодня играют:\n\n" + "".join(games)
         await context.bot.send_message(chat_id="@kawaleague", text=ans, parse_mode=ParseMode.HTML)
 
+    @command_handler("status")
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         assert user
@@ -569,6 +616,7 @@ class BotHandlers:
 
         await self.send_game_status_message(context)
 
+    @command_handler("start_status_message")
     async def start_status_message_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -595,6 +643,7 @@ class BotHandlers:
         text = "Timer successfully set!"
         await update.effective_message.reply_text(text)
 
+    @command_handler("player_info", "my_games")
     async def get_player_info_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -653,6 +702,7 @@ class BotHandlers:
         await update.effective_message.reply_text(message)
         logger.info("Person %s requested info for player %s", user.full_name, player.irl_name)
 
+    @command_handler("table_info")
     async def get_table_info_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -705,10 +755,12 @@ class BotHandlers:
         await update.effective_message.reply_text(message)
         logger.info("Person %s requested info for table %s", user.full_name, table.table_id)
 
+    @command_handler("lobby")
     async def lobby_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         assert update.effective_message
         await update.effective_message.reply_text(f"https://tenhou.net/3/?{self.lobby[:9]}")
 
+    @command_handler("pantheon")
     async def pantheon_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         assert update.effective_message
         await update.effective_message.reply_text(
@@ -733,6 +785,7 @@ class BotHandlers:
         else:
             await update.effective_message.reply_text("❌ Failed to reload session")
 
+    @command_handler("get_settings")
     async def get_settings_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -750,6 +803,7 @@ class BotHandlers:
             await update.effective_message.reply_document(document=settings_file)
         logger.info("Admin %s (%s) requested the settings file.", user.username, user.id)
 
+    @command_handler("set_language")
     async def set_language(self, update, context) -> None:
         user_id = update.effective_user.id
         if not context.args or context.args[0] not in ("ru", "en"):
@@ -766,6 +820,7 @@ class BotHandlers:
         self.db.set_language(p_id, lang)
         await update.message.reply_text(self.tr(lang, "language_set"))
 
+    @command_handler("update_event_players")
     async def update_event_players_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -790,6 +845,7 @@ class BotHandlers:
             await update.effective_message.reply_text(f"Event {event.event_id}\n{res}")
             logger.info("Updated event %s", event.event_id)
 
+    @command_handler("create_seating")
     async def create_seating_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -808,6 +864,7 @@ class BotHandlers:
         create_seating(self.db, event)
         await update.effective_message.reply_text("Seating created")
 
+    @command_handler("reveal_new_tables")
     async def reveal_new_tables(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
 
@@ -841,6 +898,7 @@ class BotHandlers:
             f"Event {event.event_id} cached tables\n{' '.join(t.name for t in cached)}"
         )
 
+    @command_handler("seating_image")
     async def seating_image_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -860,6 +918,7 @@ class BotHandlers:
         with open("seating.png", "rb") as image_file:
             await update.effective_message.reply_document(document=image_file)
 
+    @callback_query_handler(pattern=r"^TC")
     async def chat_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         chat = query.message.chat
@@ -897,6 +956,7 @@ class BotHandlers:
                     await chat.send_message(f"Не удалось пригласить игрока {player.irl_name}.")
                     logger.error(e)
 
+    @command_handler("set_chat")
     async def set_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.effective_message.chat.type != "supergroup":
             await update.effective_message.reply_text(
