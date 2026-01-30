@@ -8,6 +8,7 @@ Telegram bot for league management.
    - `python -m venv .venv`
    - `source .venv/bin/activate`
    - `pip install -r requirements.txt`
+   - (dev) `pip install -r requirements-dev.txt`
 2. Install pre-commit hooks:
    - `pip install pre-commit`
    - `pre-commit install`
@@ -23,3 +24,4 @@ Telegram bot for league management.
 - `pre-commit run -a`
 - `ruff check src app scripts`
 - `ruff format src app scripts`
+- `pytest`
