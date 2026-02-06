@@ -13,6 +13,9 @@ services:
     volumes:
       - ./app/:/app/app/
       - ./src/:/app/src/
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
 
   db:
     ports:

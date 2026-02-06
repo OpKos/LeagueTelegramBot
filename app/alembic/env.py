@@ -31,7 +31,8 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-url = f"postgresql+psycopg2://{settings.DB_USER}:{settings.DB_PASSWORD}@db/{settings.DB_NAME}"
+database_settings = settings.load_database_settings()
+url = settings.build_database_url(database_settings)
 
 config.set_main_option("sqlalchemy.url", url)
 
