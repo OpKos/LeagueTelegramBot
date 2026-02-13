@@ -4,10 +4,9 @@ from matplotlib import font_manager
 from PIL import Image, ImageDraw, ImageFont
 
 from . import models
-from .sqlalchemy_parser import SqlParser
 
 
-def create_seating_image(db: SqlParser, event: models.Event):
+def create_seating_image(event: models.Event):
     name_font_file = font_manager.findfont("Jost", fallback_to_default=False)
     name_font = ImageFont.truetype(font=name_font_file, size=25)
     table_font_file = font_manager.findfont("Jost", fallback_to_default=False)

@@ -37,7 +37,7 @@ class RegistrationHandlers:
 
         tenhou_name = args[0]
 
-        player = self.db.get_player(telegram_id=user.id)
+        player = self.players.get_player(telegram_id=user.id)
         if player:
             lang = player.language
             old_name = player.tenhou_name
@@ -46,7 +46,7 @@ class RegistrationHandlers:
                     self.tr(lang, "already_registered", old=old_name, new=tenhou_name)
                 )
             else:
-                self.db.update_tenhou_nick(p_id=player.p_id, tenhou_name=tenhou_name)
+                self.players.update_tenhou_nick(p_id=player.p_id, tenhou_name=tenhou_name)
                 await update.effective_message.reply_text(
                     self.tr(lang, "nick_change", old=old_name, new=tenhou_name)
                 )
@@ -58,7 +58,7 @@ class RegistrationHandlers:
             )
             return
 
-        self.db.register_player(
+        self.players.register_player(
             telegram_id=user.id, telegram_name=user.username, tenhou_id=tenhou_name
         )
         await update.effective_message.reply_text(
@@ -79,11 +79,11 @@ class RegistrationHandlers:
             return
 
         lang = context.args[0]
-        p_id = self.db.get_player(telegram_id=user_id).p_id
+        p_id = self.players.get_player(telegram_id=user_id).p_id
 
         if not p_id:
             await update.message.reply_text(self.tr(lang, "not_registered"))
             return
 
-        self.db.set_language(p_id, lang)
+        self.players.set_language(p_id, lang)
         await update.message.reply_text(self.tr(lang, "language_set"))

@@ -31,7 +31,7 @@ class InfoHandlers:
             return
 
         if not context.args:
-            player = self.db.get_player(telegram_id=user.id)
+            player = self.players.get_player(telegram_id=user.id)
 
         elif len(context.args) != 1:
             await update.effective_message.reply_text("Использование: /player_info <telegram_name>")
@@ -40,7 +40,7 @@ class InfoHandlers:
             telegram_name = context.args[0]
             if telegram_name[0] == "@":
                 telegram_name = telegram_name[1:]
-            player = self.db.get_player(telegram_name=telegram_name)
+            player = self.players.get_player(telegram_name=telegram_name)
 
         if not player:
             await update.effective_message.reply_text("Пользователь не зарегистрирован.")
@@ -94,7 +94,7 @@ class InfoHandlers:
             return
 
         table_id = int(context.args[0])
-        table = self.db.get_table(table_id)
+        table = self.tables.get_table(table_id)
         if not table:
             await update.effective_message.reply_text("Стол не найден.")
             return

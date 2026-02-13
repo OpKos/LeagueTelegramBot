@@ -46,7 +46,7 @@ class AdminHandlers:
             )
             return
 
-        success = self.db.set_game_status(game_id, status)
+        success = self.games.set_game_status(game_id, status)
         if success:
             status_text = "started" if status == "1" else "not started"
             await update.effective_message.reply_text(
@@ -118,8 +118,8 @@ class AdminHandlers:
             await update.effective_message.reply_text("ID стола должен быть числом")
             return
 
-        if self.db.reveal_table(table_id):
-            table = self.db.get_table(table_id)
+        if self.tables.reveal_table(table_id):
+            table = self.tables.get_table(table_id)
             assert table
             await self.notify_table_revealed(context.bot, table)
             await update.effective_message.reply_text(f"Стол {table_id} раскрыт")
@@ -178,7 +178,7 @@ class AdminHandlers:
             await update.effective_message.reply_text("🔒 Admin only command")
             return
 
-        if self.db.reload_session():
+        if self.session_manager.reload_session():
             await update.effective_message.reply_text("🔄 Database session reloaded")
         else:
             await update.effective_message.reply_text("❌ Failed to reload session")
@@ -218,11 +218,11 @@ class AdminHandlers:
 
         logger.info("Admin %s (%s) updated players in events.", user.username, user.id)
 
-        events = self.db.get_signup_events()
+        events = self.events.get_signup_events()
 
         for event in events:
-            self.db.clear_event_players(event.event_id)
-            res = event_portal_update(self.db, event)
+            self.events.clear_event_players(event.event_id)
+            res = event_portal_update(self.players, self.events, event)
             await update.effective_message.reply_text(f"Event {event.event_id}\n{res}")
             logger.info("Updated event %s", event.event_id)
 
@@ -238,11 +238,11 @@ class AdminHandlers:
             )
             return
 
-        event = self.db.get_event(int(context.args[0]))
+        event = self.events.get_event(int(context.args[0]))
         logger.info(
             "Admin %s (%s) created seating for event %s", user.username, user.id, event.event_id
         )
-        create_seating(self.db, event)
+        create_seating(self.tables, self.games, event)
         await update.effective_message.reply_text("Seating created")
 
     @command_handler("reveal_new_tables")
@@ -255,7 +255,7 @@ class AdminHandlers:
             )
             return
 
-        event = self.db.get_event(int(context.args[0]))
+        event = self.events.get_event(int(context.args[0]))
         new_min = int(context.args[1])
         new_max = int(context.args[2])
         logger.info(
@@ -267,14 +267,14 @@ class AdminHandlers:
         )
         logger.info("Admin %s (%s) revealed new tables", user.username, event.event_id)
         event.global_maximum = new_max
-        nt = self.db.try_reveal(event.event_id, cache=True)
+        nt = self.reveal.try_reveal(event.event_id, cache=True)
         while nt:
-            nt = self.db.try_reveal(event.event_id, cache=True)
+            nt = self.reveal.try_reveal(event.event_id, cache=True)
         event.global_minimum = new_min
-        nt = self.db.try_reveal(event.event_id, cache=True)
+        nt = self.reveal.try_reveal(event.event_id, cache=True)
         while nt:
-            nt = self.db.try_reveal(event.event_id, cache=True)
-        cached = self.db.get_event_cached_tables(event_id=event.event_id)
+            nt = self.reveal.try_reveal(event.event_id, cache=True)
+        cached = self.tables.get_event_cached_tables(event_id=event.event_id)
         await update.effective_message.reply_text(
             f"Event {event.event_id} cached tables\n{' '.join(t.name for t in cached)}"
         )
@@ -291,10 +291,10 @@ class AdminHandlers:
             )
             return
 
-        event = self.db.get_event(int(context.args[0]))
+        event = self.events.get_event(int(context.args[0]))
         logger.info(
             "Admin %s (%s) requested image for event %s", user.username, user.id, event.event_id
         )
-        create_seating_image(self.db, event)
+        create_seating_image(event)
         with open("seating.png", "rb") as image_file:
             await update.effective_message.reply_document(document=image_file)

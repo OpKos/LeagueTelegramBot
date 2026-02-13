@@ -10,7 +10,15 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from ..app_config import AppConfig
-from ..sqlalchemy_parser import SqlParser
+from ..services import (
+    EventService,
+    GameService,
+    PlayerService,
+    ReadyService,
+    RevealService,
+    SessionManager,
+    TableService,
+)
 from ..tenhou_parser import TenhouClient
 from .decorators import HandlerSpec
 from .utils import ready_button_reply_markup, table_string
@@ -22,7 +30,13 @@ class BaseHandlers:
     _handler_attr: ClassVar[str] = "_handler_spec"
 
     def __init__(self, config: AppConfig, locales: dict[str, dict[str, str]]):
-        self.db = SqlParser(database_url=config.database_url)
+        self.session_manager = SessionManager(database_url=config.database_url)
+        self.players = PlayerService(self.session_manager)
+        self.tables = TableService(self.session_manager)
+        self.events = EventService(self.session_manager)
+        self.ready = ReadyService(self.session_manager)
+        self.games = GameService(self.session_manager, ready_service=self.ready)
+        self.reveal = RevealService(self.session_manager, table_service=self.tables)
         self.tenhou_client = TenhouClient(lobby=config.lobby, game_type="0009", is_enable=True)
         self.admin_ids = set(config.admin_ids)
         self.lobby = config.lobby
@@ -59,8 +73,8 @@ class BaseHandlers:
     async def send_game_status_message(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         now = datetime.datetime.now()
         tommorow: datetime.datetime = now + datetime.timedelta(days=1)
-        tables = self.db.get_unfinished_visible_tables()
-        started, total = self.db.get_games_status()
+        tables = self.tables.get_unfinished_visible_tables()
+        started, total = self.games.get_games_status()
         tables = [i for i in tables if i.time and now.timestamp() <= i.time < tommorow.timestamp()]
         tables.sort(key=lambda el: el.time)
         games = [table_string(table, mention=True, explicit=False) for table in tables]

@@ -2,10 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 
 from . import models
-from .sqlalchemy_parser import SqlParser
+from .services import EventService, PlayerService
 
 
-def event_portal_update(db: SqlParser, event: models.Event):
+def event_portal_update(players: PlayerService, events: EventService, event: models.Event):
     url = event.link
 
     response = requests.get(url)
@@ -32,13 +32,13 @@ def event_portal_update(db: SqlParser, event: models.Event):
     res = []
     for player in data:
         name, nick, include = player
-        player = db.get_player(tenhou_name=nick)
+        player = players.get_player(tenhou_name=nick)
         if player:
-            db.fill_player_data(player.p_id, name)
+            players.fill_player_data(player.p_id, name)
             res.append(f"player updated in database: {name}")
             if include:
                 table_minimum = 10000 if player.full_ready == 1 else 0
-                db.add_event_player(
+                events.add_event_player(
                     event_id=event.event_id, player_id=player.p_id, table_minimum=table_minimum
                 )
         else:

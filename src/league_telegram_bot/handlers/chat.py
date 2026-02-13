@@ -21,8 +21,8 @@ class ChatHandlers:
             await query.answer()
             await query.edit_message_text(text="Отменено")
         table_name = data
-        table = self.db.get_table(table_name=table_name)
-        self.db.set_table_chat(table.table_id, chat_id)
+        table = self.tables.get_table(table_name=table_name)
+        self.tables.set_table_chat(table.table_id, chat_id)
         await query.answer()
         await query.edit_message_text(text=f"Выбран стол {table_name}")
         try:
@@ -69,11 +69,11 @@ class ChatHandlers:
             user.id,
             update.effective_message.chat.id,
         )
-        t = self.db.get_table(chat_id=update.effective_message.chat.id)
+        t = self.tables.get_table(chat_id=update.effective_message.chat.id)
         if t:
             await update.effective_message.reply_text(f"У этого чата уже есть стол {t.name}.")
             return
-        player = self.db.get_player(telegram_id=user.id)
+        player = self.players.get_player(telegram_id=user.id)
         if not player:
             await update.effective_message.reply_text("Вы не зарегистрированы.")
             return

@@ -3,7 +3,7 @@ import random
 
 from . import models
 from .paths import app_path
-from .sqlalchemy_parser import SqlParser
+from .services import GameService, TableService
 
 FOUR_SEAT_ORDERS = [
     [0, 1, 2, 3],  # ABCD
@@ -13,7 +13,7 @@ FOUR_SEAT_ORDERS = [
 ]
 
 
-def create_seating(db: SqlParser, event: models.Event):
+def create_seating(tables: TableService, games: GameService, event: models.Event):
     players = event.players()
     n = len(players)
     random.shuffle(players)
@@ -26,10 +26,10 @@ def create_seating(db: SqlParser, event: models.Event):
     random.shuffle(seating)
     tables = [[players[i] for i in j] for j in seating]
     for number, table_order in enumerate(tables, 1):
-        table = db.create_table_with_players(
+        table = tables.create_table_with_players(
             event_id=event.event_id, table_name=event.name + str(number), players=table_order
         )
         orders = FOUR_SEAT_ORDERS
         for order in orders:
             game_order = [table_order[order[i]] for i in range(len(table_order))]
-            db.create_game_with_players(table_id=table.table_id, players=game_order)
+            games.create_game_with_players(table_id=table.table_id, players=game_order)

@@ -21,20 +21,20 @@ class TableHandlers:
 
         logger.info(f"Пользователь {user.username} ({user.id}) вызвал /start_table.")
 
-        table = self.db.get_table(chat_id=update.effective_message.chat_id)
+        table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
             await update.effective_message.reply_text(
                 "У чата не указан стол, используйте /set_chat"
             )
             return
 
-        game = self.db.get_table_first_game(table_id=table.table_id)
+        game = self.tables.get_table_first_game(table_id=table.table_id)
         if not game:
             await update.effective_message.reply_text(f"Нет неначатых игр за столом {table.name}")
             logger.info(f"Нет игр за столом {table.name}")
             return
 
-        game_string = self.db.get_game_string(game_id=game.game_id)
+        game_string = self.games.get_game_string(game_id=game.game_id)
         await update.message.reply_text(game_string, reply_markup=self._ready_button_reply_markup)
 
     @callback_query_handler(pattern=r"^RB")
@@ -49,21 +49,21 @@ class TableHandlers:
             return
         status = data
         user = update.effective_user
-        player = self.db.get_player(telegram_id=user.id)
-        table = self.db.get_table(chat_id=chat_id)
-        game = self.db.get_table_first_game(table_id=table.table_id)
+        player = self.players.get_player(telegram_id=user.id)
+        table = self.tables.get_table(chat_id=chat_id)
+        game = self.tables.get_table_first_game(table_id=table.table_id)
         if not game:
             await query.edit_message_text(text="Все игры за столом сыграны")
             return
         if status == "Ready":
             logger.info("User %s pressed ready button", user.username)
-            self.db.set_player_ready(player.p_id)
+            self.ready.set_player_ready(player.p_id)
         else:
             logger.info("User %s pressed unready button", user.username)
-            self.db.set_player_unready(player.p_id)
-        msg = self.db.get_game_string(game_id=game.game_id)
+            self.ready.set_player_unready(player.p_id)
+        msg = self.games.get_game_string(game_id=game.game_id)
         await query.edit_message_text(text=msg, reply_markup=self._ready_button_reply_markup)
-        rdy = self.db.check_game_ready(game_id=game.game_id)
+        rdy = self.games.check_game_ready(game_id=game.game_id)
         if rdy:
             player_nicks = [p.tenhou_name for p in game.players()]
             result, missed_players, success = self.tenhou_client.start_game(player_nicks)
@@ -75,20 +75,20 @@ class TableHandlers:
                 success,
             )
             if success:
-                self.db.set_game_status(game.game_id, 1)
+                self.games.set_game_status(game.game_id, 1)
                 seat_winds_names = ["東", "南", "西", "北"]
                 text = f"Игра за столом {game.table.name} запущена:"
                 for i, p in enumerate(game.players()):
                     text += f"\n{seat_winds_names[i]} {p.irl_name} ({p.tenhou_name})"
-                    self.db.set_player_unready(p.p_id)
+                    self.ready.set_player_unready(p.p_id)
                 await context.bot.send_message(chat_id="@kawaleague", text=text)
                 logger.info("Игра за столом %s успешно запущена", game.table.name)
                 await query.edit_message_text(text="Приятной игры!")
             elif result == "MEMBER NOT FOUND":
                 for nick in missed_players:
-                    p = self.db.get_player(tenhou_name=nick)
-                    self.db.set_player_unready(p.p_id)
-                msg = self.db.get_game_string(game_id=game.game_id)
+                    p = self.players.get_player(tenhou_name=nick)
+                    self.ready.set_player_unready(p.p_id)
+                msg = self.games.get_game_string(game_id=game.game_id)
                 await query.edit_message_text(
                     text=msg, reply_markup=self._ready_button_reply_markup
                 )
@@ -107,22 +107,22 @@ class TableHandlers:
             )
             return
         logger.info("User %s (%s) issued /next_table command.", user.username, user.id)
-        player = self.db.get_player(telegram_id=user.id)
+        player = self.players.get_player(telegram_id=user.id)
         if not player:
             await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
             return
         lang = player.language
-        if not self.db.set_target_tables(player.p_id, goal=1):
+        if not self.players.set_target_tables(player.p_id, goal=1):
             await update.effective_message.reply_text(self.tr(lang, "next_table_fail"))
             return
 
         await update.effective_message.reply_text(self.tr(lang, "next_table_success"))
 
         for ep in player.player_events:
-            nt = self.db.try_reveal(ep.event_id)
+            nt = self.reveal.try_reveal(ep.event_id)
             while nt:
                 await self.notify_table_revealed(context.bot, nt)
-                nt = self.db.try_reveal(ep.event_id)
+                nt = self.reveal.try_reveal(ep.event_id)
 
     @command_handler("all_tables")
     async def all_tables_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -133,14 +133,14 @@ class TableHandlers:
             )
             return
         logger.info("User %s (%s) issued /all_tables command.", user.username, user.id)
-        player = self.db.get_player(telegram_id=user.id)
+        player = self.players.get_player(telegram_id=user.id)
         if not player:
             await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
             return
         player.full_ready = 1
-        self.db.session.commit()
+        self.session_manager.session.commit()
         lang = player.language
-        if not self.db.set_target_tables(player.p_id, full=True):
+        if not self.players.set_target_tables(player.p_id, full=True):
             await update.effective_message.reply_text(self.tr(lang, "all_tables_fail"))
             return
 
@@ -149,17 +149,17 @@ class TableHandlers:
         for ep in player.player_events:
             if ep.event.started == 0:
                 continue
-            nt = self.db.try_reveal(ep.event_id)
+            nt = self.reveal.try_reveal(ep.event_id)
             while nt:
                 await self.notify_table_revealed(context.bot, nt)
-                nt = self.db.try_reveal(ep.event_id)
+                nt = self.reveal.try_reveal(ep.event_id)
 
     @command_handler("set_time")
     async def set_time_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Обновляет статус игры (только для администраторов)."""
         user = update.effective_user
 
-        table = self.db.get_table(chat_id=update.effective_message.chat_id)
+        table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
             await update.effective_message.reply_text(
                 "У чата не указан стол, используйте /set_chat"
@@ -184,7 +184,7 @@ class TableHandlers:
             logger.info("No unstarted games at table %s.", table.name)
             return
 
-        player = self.db.get_player(telegram_id=user.id)
+        player = self.players.get_player(telegram_id=user.id)
         if player not in table.players():
             await update.effective_message.reply_text(
                 "Указывать время можно только за своим столом."
@@ -231,7 +231,7 @@ class TableHandlers:
                 f"Время не распознано {year}.{month}.{day} {hour}:{minute}"
             )
             return
-        self.db.set_table_time(
+        self.tables.set_table_time(
             table_id=table.table_id, timestamp=int(prospective_start.timestamp())
         )
         logger.info(
@@ -253,14 +253,14 @@ class TableHandlers:
         """Обновляет статус игры (только для администраторов)."""
         user = update.effective_user
 
-        table = self.db.get_table(chat_id=update.effective_message.chat_id)
+        table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
             await update.effective_message.reply_text(
                 "У чата не указан стол, используйте /set_chat"
             )
             return
 
-        player = self.db.get_player(telegram_id=user.id)
+        player = self.players.get_player(telegram_id=user.id)
         if player not in table.players() and not self.is_admin(user.id):
             await update.effective_message.reply_text("Удалять время можно только за своим столом.")
             logger.info(
@@ -269,7 +269,7 @@ class TableHandlers:
                 [context.args],
             )
             return
-        self.db.set_table_time(table_id=table.table_id, timestamp=0)
+        self.tables.set_table_time(table_id=table.table_id, timestamp=0)
         logger.info("%s used remove_time for table %s.", user.name, [table.table_id])
         await update.effective_message.reply_text("Время удалено.")
 
@@ -288,7 +288,7 @@ class TableHandlers:
 
         now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
         cutoff = now - datetime.timedelta(hours=3)
-        tables = self.db.get_unfinished_visible_tables()
+        tables = self.tables.get_unfinished_visible_tables()
         tables.sort(key=lambda el: el.table_id)
         unknown_ids = [
             table.name for table in tables if not table.time or table.time < cutoff.timestamp()
