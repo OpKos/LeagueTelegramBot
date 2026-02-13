@@ -6,9 +6,9 @@ from pathlib import Path
 from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler
 
-from .app_config import load_app_config, load_locales
+from .config.app_config import load_app_config, load_locales
+from .config.logging_setup import configure_logging
 from .handlers import BotHandlers
-from .logging_setup import configure_logging
 
 
 def load_token(token_path: Path) -> str:

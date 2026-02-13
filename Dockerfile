@@ -19,4 +19,4 @@ EXPOSE 8000
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/src
 ENV ALEMBIC_CONFIG=/app/app/alembic.ini
-CMD ["/app/app/telegram_main.py"]
+CMD ["/app/app/entrypoint.py"]

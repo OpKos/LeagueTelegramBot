@@ -9,7 +9,8 @@ from telegram import Bot
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from ..app_config import AppConfig
+from ..config.app_config import AppConfig
+from ..integrations.tenhou_client import TenhouClient
 from ..services import (
     EventService,
     GameService,
@@ -19,7 +20,6 @@ from ..services import (
     SessionManager,
     TableService,
 )
-from ..tenhou_parser import TenhouClient
 from .decorators import HandlerSpec
 from .utils import ready_button_reply_markup, table_string
 

@@ -1,4 +1,4 @@
-from .telegram_main import main
+from .entrypoint import main
 
 if __name__ == "__main__":
     main()

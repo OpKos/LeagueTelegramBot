@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from league_telegram_bot import paths, settings
+from league_telegram_bot.config import paths, settings
 
 
 def test_build_database_url_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -27,7 +27,7 @@ def test_app_path_prefers_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_tenhou_client_attributes() -> None:
-    from league_telegram_bot.tenhou_parser import TenhouClient
+    from league_telegram_bot.integrations.tenhou_client import TenhouClient
 
     client = TenhouClient(lobby="test", game_type="0009", is_enable=True)
 
@@ -35,10 +35,10 @@ def test_tenhou_client_attributes() -> None:
     assert "tenhou.net" in client.start_game_url
 
 
-def test_telegram_main_importable() -> None:
+def test_entrypoint_importable() -> None:
     pytest.importorskip("sqlalchemy")
     pytest.importorskip("telegram")
 
-    from league_telegram_bot import telegram_main
+    from league_telegram_bot import entrypoint
 
-    assert callable(telegram_main.main)
+    assert callable(entrypoint.main)

@@ -6,7 +6,7 @@ from typing import Protocol
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from .. import settings
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 

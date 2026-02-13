@@ -7,9 +7,9 @@ import pytz
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ..event_portal_update import event_portal_update
-from ..seating_functions import create_seating
-from ..seating_image import create_seating_image
+from ..integrations.event_portal import event_portal_update
+from ..seating.image import create_seating_image
+from ..seating.logic import create_seating
 from .decorators import command_handler
 
 logger = logging.getLogger()

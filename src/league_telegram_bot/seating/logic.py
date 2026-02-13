@@ -1,9 +1,9 @@
 import csv
 import random
 
-from . import models
-from .paths import app_path
-from .services import GameService, TableService
+from .. import models
+from ..config.paths import app_path
+from ..services import GameService, TableService
 
 FOUR_SEAT_ORDERS = [
     [0, 1, 2, 3],  # ABCD

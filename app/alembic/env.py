@@ -3,7 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from league_telegram_bot import settings
+from league_telegram_bot.config import settings
 from league_telegram_bot.models.base import Base
 from league_telegram_bot.models.game import Game
 from league_telegram_bot.models.game_player import GamePlayer

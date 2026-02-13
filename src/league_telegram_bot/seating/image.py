@@ -3,7 +3,7 @@ from math import floor, sqrt
 from matplotlib import font_manager
 from PIL import Image, ImageDraw, ImageFont
 
-from . import models
+from .. import models
 
 
 def create_seating_image(event: models.Event):

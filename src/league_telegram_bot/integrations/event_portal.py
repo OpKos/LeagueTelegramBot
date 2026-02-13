@@ -1,8 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 
-from . import models
-from .services import EventService, PlayerService
+from .. import models
+from ..services import EventService, PlayerService
 
 
 def event_portal_update(players: PlayerService, events: EventService, event: models.Event):
@@ -13,9 +13,9 @@ def event_portal_update(players: PlayerService, events: EventService, event: mod
 
     soup = BeautifulSoup(data, "html.parser")
     table = soup.find(class_="table table-hover mt-4")
-    players = table.find_all("tr")
+    player_rows = table.find_all("tr")
     data = []
-    for p in players[1:]:
+    for p in player_rows[1:]:
         success = 1 if p.has_attr("class") else 0
         name_obj, city_obj, nick_obj = p.find_all("td")[:3]
         if name_obj.find(class_="d-none d-print-block"):
@@ -32,14 +32,14 @@ def event_portal_update(players: PlayerService, events: EventService, event: mod
     res = []
     for player in data:
         name, nick, include = player
-        player = players.get_player(tenhou_name=nick)
-        if player:
-            players.fill_player_data(player.p_id, name)
+        db_player = players.get_player(tenhou_name=nick)
+        if db_player:
+            players.fill_player_data(db_player.p_id, name)
             res.append(f"player updated in database: {name}")
             if include:
-                table_minimum = 10000 if player.full_ready == 1 else 0
+                table_minimum = 10000 if db_player.full_ready == 1 else 0
                 events.add_event_player(
-                    event_id=event.event_id, player_id=player.p_id, table_minimum=table_minimum
+                    event_id=event.event_id, player_id=db_player.p_id, table_minimum=table_minimum
                 )
         else:
             res.append(f"player not found in database: {name}")
