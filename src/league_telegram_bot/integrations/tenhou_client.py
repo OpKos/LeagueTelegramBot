@@ -1,7 +1,6 @@
-from io import BytesIO
 from urllib.parse import quote_plus, unquote
 
-import pycurl
+import requests
 
 
 class TenhouClient:
@@ -20,29 +19,21 @@ class TenhouClient:
         Send request to tenhou.net to get all waited players in lobby
         """
         url = self.get_players_url
-
-        headers = [
-            "Origin: https://tenhou.net",
-            "Content-Type: text/plain;charset=UTF-8",
-            f"Referer: https://tenhou.net/cs/edit/?{self.lobby}",
-        ]
-
+        headers = {
+            "Origin": "https://tenhou.net",
+            "Content-Type": "text/plain;charset=UTF-8",
+            "Referer": f"https://tenhou.net/cs/edit/?{self.lobby}",
+        }
         data = f"L={self.lobby}"
-
         try:
-            buffer = BytesIO()
-            c = pycurl.Curl()
-            c.setopt(c.URL, url)
-            c.setopt(c.HTTPHEADER, headers)
-            c.setopt(c.POSTFIELDS, data)
-            c.setopt(c.WRITEDATA, buffer)
-            c.setopt(pycurl.SSL_VERIFYPEER, 0)
-            c.setopt(pycurl.SSL_VERIFYHOST, 0)
-            c.perform()
-            c.close()
-
-            response = buffer.getvalue()
-            result = unquote(response.decode("utf-8"))
+            response = requests.post(
+                url,
+                headers=headers,
+                data=data,
+                verify=False,
+                timeout=10,
+            )
+            result = unquote(response.text)
             # 'IDLE=NoNameA,FrozenM&PLAY=...'
             waited_players = [
                 x.strip()
@@ -59,29 +50,21 @@ class TenhouClient:
         """
         url = self.start_game_url
         players = quote_plus("\r\n".join([x for x in player_names]))
-
-        headers = [
-            "Origin: https://tenhou.net",
-            "Content-Type: text/plain;charset=UTF-8",
-            f"Referer: https://tenhou.net/cs/edit/?{self.lobby}",
-        ]
-
+        headers = {
+            "Origin": "https://tenhou.net",
+            "Content-Type": "text/plain;charset=UTF-8",
+            "Referer": f"https://tenhou.net/cs/edit/?{self.lobby}",
+        }
         data = f"L={self.lobby}&R2={self.game_type}&M={players}&RND=default&WG=1&PW="
         try:
-            buffer = BytesIO()
-            c = pycurl.Curl()
-            c.setopt(c.URL, url)
-            c.setopt(c.HTTPHEADER, headers)
-            c.setopt(c.POSTFIELDS, data)
-            c.setopt(c.WRITEDATA, buffer)
-            c.setopt(pycurl.SSL_VERIFYPEER, 0)
-            c.setopt(pycurl.SSL_VERIFYHOST, 0)
-            c.perform()
-            c.close()
-
-            response = buffer.getvalue()
-            result = unquote(response.decode("utf-8"))
-
+            response = requests.post(
+                url,
+                headers=headers,
+                data=data,
+                verify=False,
+                timeout=10,
+            )
+            result = unquote(response.text)
             if result.startswith("FAILED"):
                 return "FAILED", [], False
             elif result.startswith("MEMBER NOT FOUND"):
