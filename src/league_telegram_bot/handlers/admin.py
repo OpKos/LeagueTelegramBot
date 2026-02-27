@@ -1,0 +1,300 @@
+from __future__ import annotations
+
+import datetime
+import logging
+
+import pytz
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from ..integrations.event_portal import event_portal_update
+from ..seating.image import create_seating_image
+from ..seating.logic import create_seating
+from .decorators import command_handler
+
+logger = logging.getLogger()
+
+
+class AdminHandlers:
+    @command_handler("update_game_status")
+    async def update_game_status_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Обновляет статус игры (только для администраторов)."""
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        if not context.args or len(context.args) != 2:
+            await update.effective_message.reply_text(
+                "Usage: /update_game_status <game_id> <status>"
+            )
+            return
+
+        game_id = int(context.args[0])
+        status = int(context.args[1])
+
+        if status not in [0, 1]:
+            await update.effective_message.reply_text(
+                "Invalid status. Use '1' for started or '0' for not started."
+            )
+            return
+
+        success = self.games.set_game_status(game_id, status)
+        if success:
+            status_text = "started" if status == "1" else "not started"
+            await update.effective_message.reply_text(
+                f"Статус игры с ID {game_id} успешно обновлен на '{status_text}'."
+            )
+            logger.info(
+                "Admin %s (%s) updated game status with game ID %s to %s.",
+                user.username,
+                user.id,
+                game_id,
+                status_text,
+            )
+        else:
+            await update.effective_message.reply_text(
+                f"Не удалось обновить статус игры с ID {game_id}."
+            )
+            logger.error(
+                "Admin %s (%s) failed to update game status with game ID %s to %s.",
+                user.username,
+                user.id,
+                game_id,
+                status,
+            )
+
+    @command_handler("get_logs")
+    async def get_logs_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Отправляет файл с логами администратору."""
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        try:
+            with open("bot.log", "rb") as log_file:
+                await update.effective_message.reply_document(document=log_file)
+            logger.info("Admin %s (%s) requested the log file.", user.username, user.id)
+        except FileNotFoundError:
+            await update.effective_message.reply_text("Файл с логами не найден.")
+            logger.error("Log file not found for admin %s (%s).", user.username, user.id)
+        except Exception as e:
+            await update.effective_message.reply_text(f"Произошла ошибка при отправке логов: {e}")
+            logger.error("Error sending log file to admin %s (%s): %s", user.username, user.id, e)
+
+    @command_handler("force_reveal")
+    async def force_reveal_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Админская команда раскрытия стола через стандартный метод"""
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text("Только для админов")
+            return
+
+        if not context.args or len(context.args) != 1:
+            await update.effective_message.reply_text("Использование: /force_reveal <table_id>")
+            return
+
+        try:
+            table_id = int(context.args[0])
+        except ValueError:
+            await update.effective_message.reply_text("ID стола должен быть числом")
+            return
+
+        if self.tables.reveal_table(table_id):
+            table = self.tables.get_table(table_id)
+            assert table
+            await self.notify_table_revealed(context.bot, table)
+            await update.effective_message.reply_text(f"Стол {table_id} раскрыт")
+        else:
+            await update.effective_message.reply_text("Ошибка раскрытия стола")
+
+    @command_handler("status")
+    async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        await self.send_game_status_message(context)
+
+    @command_handler("start_status_message")
+    async def start_status_message_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+        assert context.job_queue
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        chat_id = update.effective_message.chat_id
+        tz = pytz.timezone("Europe/Moscow")
+        callback_time = datetime.time(hour=10, minute=0, tzinfo=tz)
+        context.job_queue.run_daily(
+            self.send_game_status_message,
+            time=callback_time,
+            chat_id="@kawaleague",
+            name=str(chat_id),
+        )
+        text = "Timer successfully set!"
+        await update.effective_message.reply_text(text)
+
+    async def reload_session_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Admin command to reload database session"""
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text("🔒 Admin only command")
+            return
+
+        if self.session_manager.reload_session():
+            await update.effective_message.reply_text("🔄 Database session reloaded")
+        else:
+            await update.effective_message.reply_text("❌ Failed to reload session")
+
+    @command_handler("get_settings")
+    async def get_settings_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Отправляет текущий файл настроек администратору."""
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        with open(self.settings_path, "rb") as settings_file:
+            await update.effective_message.reply_document(document=settings_file)
+        logger.info("Admin %s (%s) requested the settings file.", user.username, user.id)
+
+    @command_handler("update_event_players")
+    async def update_event_players_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+        assert context.job_queue
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        logger.info("Admin %s (%s) updated players in events.", user.username, user.id)
+
+        events = self.events.get_signup_events()
+
+        for event in events:
+            self.events.clear_event_players(event.event_id)
+            res = event_portal_update(self.players, self.events, event)
+            await update.effective_message.reply_text(f"Event {event.event_id}\n{res}")
+            logger.info("Updated event %s", event.event_id)
+
+    @command_handler("create_seating")
+    async def create_seating_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        user = update.effective_user
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        event = self.events.get_event(int(context.args[0]))
+        logger.info(
+            "Admin %s (%s) created seating for event %s", user.username, user.id, event.event_id
+        )
+        create_seating(self.tables, self.games, event)
+        await update.effective_message.reply_text("Seating created")
+
+    @command_handler("reveal_new_tables")
+    async def reveal_new_tables(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        event = self.events.get_event(int(context.args[0]))
+        new_min = int(context.args[1])
+        new_max = int(context.args[2])
+        logger.info(
+            "Admin %s (%s) revealed new tables with new_min = %s and new_max = %s",
+            user.username,
+            event.event_id,
+            new_min,
+            new_max,
+        )
+        logger.info("Admin %s (%s) revealed new tables", user.username, event.event_id)
+        event.global_maximum = new_max
+        nt = self.reveal.try_reveal(event.event_id, cache=True)
+        while nt:
+            nt = self.reveal.try_reveal(event.event_id, cache=True)
+        event.global_minimum = new_min
+        nt = self.reveal.try_reveal(event.event_id, cache=True)
+        while nt:
+            nt = self.reveal.try_reveal(event.event_id, cache=True)
+        cached = self.tables.get_event_cached_tables(event_id=event.event_id)
+        await update.effective_message.reply_text(
+            f"Event {event.event_id} cached tables\n{' '.join(t.name for t in cached)}"
+        )
+
+    @command_handler("seating_image")
+    async def seating_image_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        user = update.effective_user
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        event = self.events.get_event(int(context.args[0]))
+        logger.info(
+            "Admin %s (%s) requested image for event %s", user.username, user.id, event.event_id
+        )
+        create_seating_image(event)
+        with open("seating.png", "rb") as image_file:
+            await update.effective_message.reply_document(document=image_file)

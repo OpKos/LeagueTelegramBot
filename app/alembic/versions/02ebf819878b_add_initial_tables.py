@@ -1,7 +1,7 @@
 """Add initial tables
 
 Revision ID: 02ebf819878b
-Revises: 
+Revises:
 Create Date: 2025-11-21 14:17:21.716768
 
 """
