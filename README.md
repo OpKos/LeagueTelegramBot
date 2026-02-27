@@ -7,10 +7,10 @@ Telegram bot for league management.
 1. Create a virtualenv and install runtime deps:
    - `python -m venv .venv`
    - `source .venv/bin/activate`
+   - `make contribute`
+2. If you prefer manual setup instead of `make contribute`:
    - `pip install -r requirements.txt`
-   - (dev) `pip install -r requirements-dev.txt`
-2. Install pre-commit hooks:
-   - `pip install pre-commit`
+   - `pip install -r requirements-dev.txt`
    - `pre-commit install`
    - `pre-commit install --hook-type commit-msg`
 3. Prepare config files:
