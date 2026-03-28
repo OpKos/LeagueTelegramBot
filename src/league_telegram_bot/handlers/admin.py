@@ -291,10 +291,18 @@ class AdminHandlers:
             )
             return
 
-        event = self.events.get_event(int(context.args[0]))
+        events = self.events.get_signup_events()
         logger.info(
-            "Admin %s (%s) requested image for event %s", user.username, user.id, event.event_id
+            "Admin %s (%s) requested image for deadline group %s",
+            user.username,
+            user.id,
+            context.args[0],
         )
-        create_seating_image(event)
+        create_seating_image(
+            events=events,
+            deadline_group=int(context.args[0]),
+            filename="seating.png",
+            header=" ".join(context.args[1:]),
+        )
         with open("seating.png", "rb") as image_file:
             await update.effective_message.reply_document(document=image_file)
