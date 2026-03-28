@@ -6,20 +6,30 @@ from PIL import Image, ImageDraw, ImageFont
 from .. import models
 
 
-def create_seating_image(event: models.Event):
+def create_seating_image(
+    events: list[models.Event], deadline_group: int, filename: str, header: str = ""
+):
     name_font_file = font_manager.findfont("Jost", fallback_to_default=False)
     name_font = ImageFont.truetype(font=name_font_file, size=25)
     table_font_file = font_manager.findfont("Jost", fallback_to_default=False)
     table_font = ImageFont.truetype(font=table_font_file, size=25)
     table_font.set_variation_by_name("Bold")
+    header_font_file = font_manager.findfont("Jost", fallback_to_default=False)
+    header_font = ImageFont.truetype(font=header_font_file, size=35)
 
     bg_color = (255, 255, 255)
     kawa_yellow = (244, 169, 61)
     kawa_blue = (63, 99, 155)
-    tables = [table for table in event.tables if table.reveal_cached]
-    tables.sort(key=lambda table: table.name)
+    tables = [
+        table
+        for tables_list in [event.tables for event in events]
+        for table in tables_list
+        if table.deadline_group == deadline_group
+    ]
+    tables.sort(key=lambda table: (table.event.name, len(table.name), table.name))
 
     n = len(tables)
+    header_h = 50
     row_h = 35
     block_w = 300
     gap = 10
@@ -31,13 +41,13 @@ def create_seating_image(event: models.Event):
     image = Image.new(mode="RGBA", size=(width, height), color=bg_color)
     d = ImageDraw.Draw(image)
 
-    top = inter_gap
+    top = inter_gap + header_h + inter_gap
     center = inter_gap + block_w // 2
     for i, table in enumerate(tables):
         grid_x = i // grid_h
         grid_y = i - grid_x * grid_h
         if grid_y == 0 and i > 0:
-            top = inter_gap
+            top = inter_gap + header_h + inter_gap
             center += block_w + inter_gap + 30
         table_h = row_h * (len(table.players()) + 1) + gap * 2
         if grid_x == grid_w - 1 and grid_y == 0:
@@ -71,6 +81,13 @@ def create_seating_image(event: models.Event):
         if grid_y == grid_h - 1 and grid_x == 0:
             true_h = top
 
+    d.text(
+        anchor="mm",
+        xy=(true_w / 2, inter_gap + header_h / 2),
+        text=header,
+        fill="black",
+        font=header_font,
+    )
     image = image.crop((0, 0, true_w, true_h))
 
-    image.save("seating.png")
+    image.save(filename)

@@ -9,9 +9,9 @@ class TableService:
         self._session_provider = session_provider
 
     def create_table_with_players(
-        self, event_id: int, table_name: str, players: list[models.Player]
+        self, event_id: int, table_name: str, players: list[models.Player], deadline_group: int = 0
     ):
-        table = models.Table(event_id=event_id, name=table_name)
+        table = models.Table(event_id=event_id, name=table_name, deadline_group=deadline_group)
         self._session_provider.session.add(table)
         self._session_provider.session.commit()
         for seat, player in enumerate(players):
