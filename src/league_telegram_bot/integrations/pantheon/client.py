@@ -7,8 +7,10 @@ from google.protobuf.json_format import MessageToDict
 from twirp.context import Context
 from twirp.exceptions import TwirpServerException
 
-from .proto import mimir_pb2
+from .proto import atoms_pb2, mimir_pb2  # noqa: F401
 from .proto.mimir_client_twirp import MimirClient
+
+_ = atoms_pb2  # prevent ruff from deleting import
 
 
 class PantheonClient:
