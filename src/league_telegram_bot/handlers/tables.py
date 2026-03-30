@@ -98,7 +98,6 @@ class TableHandlers:
             else:
                 await query.message.chat.send_message(text=f"Не удалось запустить игру: {result}")
 
-    @command_handler("next_table")
     async def next_table_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         if update.effective_message.chat.type != "private":
@@ -124,7 +123,6 @@ class TableHandlers:
                 await self.notify_table_revealed(context.bot, nt)
                 nt = self.reveal.try_reveal(ep.event_id)
 
-    @command_handler("all_tables")
     async def all_tables_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         if update.effective_message.chat.type != "private":
