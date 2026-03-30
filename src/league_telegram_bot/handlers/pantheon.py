@@ -54,8 +54,7 @@ class PantheonHandlers:
             session_hash = game.get("session_hash", "—")
             await update.effective_message.reply_text(
                 "Лог отправлен в Пантеон.\n"
-                f"Сессия: {session_hash}\n"
-                f"Игроков: {len(result.get('players', []))}"
+                f"Ссылка на игру: https://rating.riichimahjong.org/event/{event.pantheon_id}/game/{session_hash}"
             )
             logger.info(
                 "Pantheon log sent by %s (%s) for event %s", user.username, user.id, event.id
