@@ -84,6 +84,9 @@ class PantheonHandlers:
                 output.append(f"Player {player.tenhou_name} found: id {pantheon_id}")
             else:
                 output.append(f"Player {player.tenhou_name} not found")
+        if len(output) == 0:
+            await update.effective_message.reply_text("Игроки без id не найдены")
+            return
         await update.effective_message.reply_text("\n".join(output))
 
 
