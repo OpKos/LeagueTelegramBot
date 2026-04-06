@@ -22,6 +22,7 @@ class EventService:
         return (
             self._session_provider.session.query(models.Event)
             .filter(models.Event.started == 1)
+            .order_by(models.Event.event_id)
             .all()
         )
 
