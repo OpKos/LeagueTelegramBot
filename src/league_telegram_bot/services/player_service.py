@@ -75,3 +75,17 @@ class PlayerService:
             self._session_provider.session.commit()
             return True
         return False
+
+    def get_unfilled_pantheon_players(self):
+        players = self._session_provider.session.query(models.Player).filter(
+            models.Player.pantheon_id is None
+        )
+        return players
+
+    def set_pantheon_id(self, p_id: int, pantheon_id: int):
+        player = self._session_provider.session.get(models.Player, p_id)
+        if player:
+            player.pantheon_id = pantheon_id
+            self._session_provider.session.commit()
+            return True
+        return False

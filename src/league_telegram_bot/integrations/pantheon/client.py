@@ -7,7 +7,8 @@ from google.protobuf.json_format import MessageToDict
 from twirp.context import Context
 from twirp.exceptions import TwirpServerException
 
-from .proto import atoms_pb2, mimir_pb2  # noqa: F401
+from .proto import atoms_pb2, frey_pb2, mimir_pb2  # noqa: F401
+from .proto.frey_client_twirp import FreyClient
 from .proto.mimir_client_twirp import MimirClient
 
 _ = atoms_pb2  # prevent ruff from deleting import
@@ -31,6 +32,7 @@ class PantheonClient:
         self._server_path_prefix = server_path_prefix
         self._timeout = timeout
         self._mimir = MimirClient(base_url)
+        self._frey = FreyClient(base_url)
 
     def send_game_log(self, link: str) -> dict[str, Any]:
         if not link:
@@ -98,6 +100,32 @@ class PantheonClient:
             return {
                 "ok": True,
                 "players": [_to_dict(entry) for entry in response.list],
+            }
+        except TwirpServerException as exc:
+            return {
+                "ok": False,
+                "error": exc.message,
+                "code": str(exc.code),
+                "meta": exc.meta,
+            }
+        except Exception as exc:  # pragma: no cover - network/transport errors
+            return {"ok": False, "error": str(exc)}
+
+    def get_person_by_tenhou(self, nickname: str):
+        if not nickname:
+            raise ValueError("nickname must be a non-empty string")
+
+        payload = frey_pb2.PersonsFindByTenhouIdsPayload(ids=[nickname])
+        try:
+            response = self._frey.FindByTenhouIds(
+                ctx=self._build_ctx(),
+                request=payload,
+                server_path_prefix=self._server_path_prefix,
+                timeout=self._timeout,
+            )
+            return {
+                "ok": True,
+                "people": [_to_dict(people) for people in response.people],
             }
         except TwirpServerException as exc:
             return {
