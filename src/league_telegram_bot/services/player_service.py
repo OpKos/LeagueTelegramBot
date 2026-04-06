@@ -77,8 +77,10 @@ class PlayerService:
         return False
 
     def get_unfilled_pantheon_players(self):
-        players = self._session_provider.session.query(models.Player).filter(
-            models.Player.pantheon_id is None
+        players = (
+            self._session_provider.session.query(models.Player)
+            .filter(models.Player.pantheon_id.is_(None))
+            .limit(20)
         )
         return players
 
