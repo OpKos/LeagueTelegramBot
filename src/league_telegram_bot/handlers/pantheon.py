@@ -29,18 +29,14 @@ class PantheonHandlers:
             await update.effective_message.reply_text("Ссылка не должна быть пустой.")
             return
 
-        player = self.players.get_player(telegram_id=user.id)
-        if not player:
-            await update.effective_message.reply_text("Вы не зарегистрированы.")
-            return
-        event = _resolve_event(self, player, update.effective_message.chat_id)
+        event = _resolve_event(self, update.effective_message.chat_id)
         if event is None:
             await update.effective_message.reply_text(
                 "Не удалось определить событие. Используйте команду в чате стола."
             )
             return
 
-        api_url = os.getenv("PANTHEON_API_URL", "https://gameapi.riichimahjong.org")
+        api_url = os.getenv("PANTHEON_GAME_API_URL", "https://gameapi.riichimahjong.org")
 
         client = PantheonClient(
             api_url,
@@ -65,8 +61,36 @@ class PantheonHandlers:
         await update.effective_message.reply_text(f"Не удалось отправить лог: {error}")
         logger.warning("Pantheon log failed for %s (%s): %s", user.username, user.id, error)
 
+    @command_handler("fill_pantheon_ids")
+    async def find_ids_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text("🔒 Admin only command")
+            return
 
-def _resolve_event(handlers, player, chat_id: int | None) -> Event | None:
+        api_url = os.getenv("PANTHEON_USER_API_URL", "https://userapi.riichimahjong.org")
+
+        client = PantheonClient(
+            api_url,
+            server_path_prefix="/v2",
+        )
+        targets = self.players.get_unfilled_pantheon_players()
+        output = []
+        for player in targets:
+            result = client.get_person_by_tenhou(player.tenhou_name)
+            if result.get("people", ""):
+                pantheon_id = result.get("people")[0].get("id")
+                self.players.set_pantheon_id(player.p_id, pantheon_id)
+                output.append(f"Player {player.tenhou_name} found: id {pantheon_id}")
+            else:
+                output.append(f"Player {player.tenhou_name} not found")
+        if len(output) == 0:
+            await update.effective_message.reply_text("Игроки без id не найдены")
+            return
+        await update.effective_message.reply_text("\n".join(output))
+
+
+def _resolve_event(handlers, chat_id: int | None) -> Event | None:
     if chat_id:
         table = handlers.tables.get_table(chat_id=chat_id)
         if table:

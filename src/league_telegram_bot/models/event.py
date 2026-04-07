@@ -26,3 +26,6 @@ class Event(Base):
 
     def players(self):
         return [ep.player for ep in self.event_players]
+
+    def pantheon_link(self):
+        return f"https://rating.riichimahjong.org/event/{self.pantheon_id}/order/rating"
