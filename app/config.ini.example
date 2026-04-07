@@ -1,9 +1,5 @@
 [Settings]
 lobby = C0123456789012345
-database = season2.db
-tables = 6
-url = https://mahjong.click/ru/tournaments/riichi/kawa-league-2-season/announcement/
-pantheon = https://rating.riichimahjong.org/event/645/info
 
 [Admins]
 tg_id_a1 = 123456789
