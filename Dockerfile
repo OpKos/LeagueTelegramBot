@@ -12,6 +12,7 @@ COPY src/ /app/src/
 
 RUN mkdir -p /usr/share/fonts/custom
 COPY app/assets/fonts/Jost-VariableFont_wght.ttf /usr/share/fonts/custom/
+COPY app/assets/fonts/Inconsolata-VariableFont_wdth.ttf /usr/share/fonts/custom/
 RUN fc-cache -f -v
 
 WORKDIR /app
