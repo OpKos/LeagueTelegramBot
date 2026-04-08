@@ -40,6 +40,7 @@ class BaseHandlers:
         self.tenhou_client = TenhouClient(lobby=config.lobby, game_type="0009", is_enable=True)
         self.admin_ids = set(config.admin_ids)
         self.lobby = config.lobby
+        self.chat = config.chat
         self.locales = locales
         self.settings_path = config.config_path
         self._ready_button_reply_markup = ready_button_reply_markup
@@ -67,7 +68,7 @@ class BaseHandlers:
     async def notify_table_revealed(self, bot: Bot, table) -> None:
         player_names = [p.irl_name for p in table.players()]
         message = f"Раскрыт стол {table.name}!\n" + "\n".join(player_names) + "\n"
-        await bot.send_message(chat_id="@kawaleague", text=message)
+        await bot.send_message(chat_id=self.chat, text=message)
 
     async def send_game_status_message(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         now = datetime.datetime.now()
@@ -80,4 +81,4 @@ class BaseHandlers:
         ans = f"Доброе утро, запущено игр: {started}/{total}"
         if games:
             ans += "\nСегодня играют:\n\n" + "".join(games)
-        await context.bot.send_message(chat_id="@kawaleague", text=ans, parse_mode=ParseMode.HTML)
+        await context.bot.send_message(chat_id=self.chat, text=ans, parse_mode=ParseMode.HTML)

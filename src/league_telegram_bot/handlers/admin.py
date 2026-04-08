@@ -161,7 +161,7 @@ class AdminHandlers:
         context.job_queue.run_daily(
             self.send_game_status_message,
             time=callback_time,
-            chat_id="@kawaleague",
+            chat_id=self.chat,
             name=str(chat_id),
         )
         text = "Timer successfully set!"

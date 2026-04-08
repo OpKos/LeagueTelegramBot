@@ -81,7 +81,7 @@ class TableHandlers:
                 for i, p in enumerate(game.players()):
                     text += f"\n{seat_winds_names[i]} {p.irl_name} ({p.tenhou_name})"
                     self.ready.set_player_unready(p.p_id)
-                await context.bot.send_message(chat_id="@kawaleague", text=text)
+                await context.bot.send_message(chat_id=self.chat, text=text)
                 logger.info("Игра за столом %s успешно запущена", game.table.name)
                 await query.edit_message_text(text="Приятной игры!")
             elif result == "MEMBER NOT FOUND":
