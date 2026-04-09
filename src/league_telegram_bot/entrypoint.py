@@ -9,6 +9,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler
 from .config.app_config import load_app_config, load_locales
 from .config.logging_setup import configure_logging
 from .handlers import BotHandlers
+from .handlers.jobs import startup_job_callback
 
 
 def load_token(token_path: Path) -> str:
@@ -58,6 +59,7 @@ def main() -> None:
 
     token = load_token(config.token_path)
     application = build_application(token, handlers)
+    application.job_queue.run_once(startup_job_callback, when=0, data={"handlers": handlers})
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

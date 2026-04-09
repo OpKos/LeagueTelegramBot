@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import datetime
 import logging
 from collections.abc import Iterable
 from typing import ClassVar
 
 from telegram import Bot
-from telegram.constants import ParseMode
-from telegram.ext import ContextTypes
 
 from ..config.app_config import AppConfig
 from ..integrations.tenhou_client import TenhouClient
@@ -21,7 +18,7 @@ from ..services import (
     TableService,
 )
 from .decorators import HandlerSpec
-from .utils import ready_button_reply_markup, table_string
+from .utils import ready_button_reply_markup
 
 logger = logging.getLogger()
 
@@ -40,6 +37,7 @@ class BaseHandlers:
         self.tenhou_client = TenhouClient(lobby=config.lobby, game_type="0009", is_enable=True)
         self.admin_ids = set(config.admin_ids)
         self.lobby = config.lobby
+        self.chat = config.chat
         self.locales = locales
         self.settings_path = config.config_path
         self._ready_button_reply_markup = ready_button_reply_markup
@@ -67,17 +65,4 @@ class BaseHandlers:
     async def notify_table_revealed(self, bot: Bot, table) -> None:
         player_names = [p.irl_name for p in table.players()]
         message = f"Раскрыт стол {table.name}!\n" + "\n".join(player_names) + "\n"
-        await bot.send_message(chat_id="@kawaleague", text=message)
-
-    async def send_game_status_message(self, context: ContextTypes.DEFAULT_TYPE) -> None:
-        now = datetime.datetime.now()
-        tommorow: datetime.datetime = now + datetime.timedelta(days=1)
-        tables = self.tables.get_unfinished_visible_tables()
-        started, total = self.games.get_games_status()
-        tables = [i for i in tables if i.time and now.timestamp() <= i.time < tommorow.timestamp()]
-        tables.sort(key=lambda el: el.time)
-        games = [table_string(table, mention=True, explicit=False) for table in tables]
-        ans = f"Доброе утро, запущено игр: {started}/{total}"
-        if games:
-            ans += "\nСегодня играют:\n\n" + "".join(games)
-        await context.bot.send_message(chat_id="@kawaleague", text=ans, parse_mode=ParseMode.HTML)
+        await bot.send_message(chat_id=self.chat, text=message)

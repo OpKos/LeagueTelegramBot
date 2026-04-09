@@ -1,5 +1,6 @@
 [Settings]
 lobby = C0123456789012345
+chat = @channel
 
 [Admins]
 tg_id_a1 = 123456789
