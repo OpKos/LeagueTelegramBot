@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import datetime
 import logging
 
-import pytz
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -139,33 +137,6 @@ class AdminHandlers:
             return
 
         await self.send_game_status_message(context)
-
-    @command_handler("start_status_message")
-    async def start_status_message_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
-        user = update.effective_user
-        assert user
-        assert update.effective_message
-        assert context.job_queue
-
-        if not self.is_admin(user.id):
-            await update.effective_message.reply_text(
-                "Эта команда доступна только администраторам."
-            )
-            return
-
-        chat_id = update.effective_message.chat_id
-        tz = pytz.timezone("Europe/Moscow")
-        callback_time = datetime.time(hour=10, minute=0, tzinfo=tz)
-        context.job_queue.run_daily(
-            self.send_game_status_message,
-            time=callback_time,
-            chat_id=self.chat,
-            name=str(chat_id),
-        )
-        text = "Timer successfully set!"
-        await update.effective_message.reply_text(text)
 
     async def reload_session_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
