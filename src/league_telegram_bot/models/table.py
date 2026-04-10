@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from .event import Event
     from .game import Game
     from .table_player import TablePlayer
+    from .table_time import TableTime
 
 
 class Table(Base):
@@ -20,7 +21,6 @@ class Table(Base):
     name: Mapped[str] = mapped_column(nullable=True)
     visible: Mapped[int] = mapped_column(insert_default=1)
     event_id: Mapped[int] = mapped_column(ForeignKey("events.event_id"))
-    time: Mapped[int] = mapped_column(insert_default=0)
     chat_id: Mapped[int] = mapped_column(
         sqlalchemy.BigInteger, insert_default=0, server_default=sqlalchemy.text("0")
     )
@@ -31,6 +31,7 @@ class Table(Base):
     event: Mapped[Event] = relationship(back_populates="tables", lazy="subquery")
     games: Mapped[list[Game]] = relationship(back_populates="table", lazy="subquery")
     players_seats: Mapped[list[TablePlayer]] = relationship(back_populates="table", lazy="subquery")
+    table_times: Mapped[list[TableTime]] = relationship(back_populates="table", lazy="subquery")
 
     def unfinished_games(self):
         return [g for g in self.games if g.started == 0]
@@ -46,3 +47,12 @@ class Table(Base):
                 if ep.event == self.event:
                     res.append(ep)
         return res
+
+    def get_relevant_times(self, left_cutoff=None, right_cutoff=None) -> list[int]:
+        relevant_times = [t_t.time for t_t in self.table_times]
+        relevant_times.sort()
+        if left_cutoff:
+            relevant_times = [el for el in relevant_times if el >= left_cutoff]
+        if right_cutoff:
+            relevant_times = [el for el in relevant_times if el <= right_cutoff]
+        return relevant_times

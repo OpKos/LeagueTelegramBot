@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import datetime
 import logging
 
+import pytz
 from telegram import LinkPreviewOptions, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
@@ -56,14 +58,23 @@ class InfoHandlers:
             f"Имя: {player.irl_name}\n\n"
         )
 
-        for table in player.visible_tables():
+        now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
+        cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
+
+        tables = player.visible_tables()
+        tables.sort(key=lambda el: el.deadline_group)
+
+        for table in tables:
             message += f"Стол {table.name}\n"
             for i in table.players():
                 message += f"{i.irl_name} ({i.dirty_mention()})\n"
-            if table.unfinished_games and table.time:
-                message += (
-                    f"Время: {timestring_from_timestamp(table.time, weekday=True, day=True)}\n"
-                )
+            if table.unfinished_games and table.get_relevant_times(left_cutoff=cutoff):
+                message += "Время:\n"
+                times = [
+                    timestring_from_timestamp(time, weekday=True, day=True)
+                    for time in table.get_relevant_times(left_cutoff=cutoff)
+                ]
+                message += "\n".join(times) + "\n"
             message += f"Сыграно: {len(table.games) - len(table.unfinished_games())} из {len(table.games)} игр\n\n"
 
         if player.invisible_tables() and self.is_admin(user.id):
@@ -93,8 +104,8 @@ class InfoHandlers:
             await update.effective_message.reply_text("Использование: /table_info <table_id>")
             return
 
-        table_id = int(context.args[0])
-        table = self.tables.get_table(table_id)
+        table_name = context.args[0]
+        table = self.tables.get_table(table_name=table_name)
         if not table:
             await update.effective_message.reply_text("Стол не найден.")
             return
@@ -105,11 +116,18 @@ class InfoHandlers:
         message = f"Стол {table.table_id}\n" f"{'Стол скрыт 🔒' if not table.visible else ''}\n"
         for i in table.players():
             message += f"{i.irl_name} ({i.dirty_mention()})\n"
-        message += (
-            f"Сыграно: {len(table.games) - len(table.unfinished_games)} из {len(table.games)} игр\n"
-        )
-        if table.time:
-            message += f"Время: {timestring_from_timestamp(table.time, weekday=True, day=True)}"
+        message += f"Сыграно: {len(table.games) - len(table.unfinished_games())} из {len(table.games)} игр\n"
+
+        now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
+        cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
+
+        if table.unfinished_games() and table.get_relevant_times(left_cutoff=cutoff):
+            message += "Время:\n"
+            times = [
+                timestring_from_timestamp(time, weekday=True, day=True)
+                for time in table.get_relevant_times(left_cutoff=cutoff)
+            ]
+            message += "\n".join(times)
         message += "\n\n"
 
         games = table.games
