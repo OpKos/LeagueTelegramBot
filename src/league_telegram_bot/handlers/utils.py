@@ -60,3 +60,13 @@ def table_time_string(table_time: TableTime, mention: bool = False, explicit: bo
         else:
             ans += ".\n\n"
     return ans
+
+
+def game_amount_string(games: int):
+    forms = ["ханчан", "ханчана", "ханчанов"]
+    if games % 10 == 1:
+        return f"{games} {forms[0]}"
+    elif 4 >= games % 10 >= 2:
+        return f"{games} {forms[1]}"
+    else:
+        return f"{games} {forms[2]}"
