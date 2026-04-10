@@ -9,7 +9,7 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from .decorators import callback_query_handler, command_handler
-from .utils import table_string
+from .utils import table_time_string
 
 logger = logging.getLogger()
 
@@ -164,20 +164,18 @@ class TableHandlers:
             )
             return
 
-        if not context.args or len(context.args) != 2:
+        if not context.args or len(context.args) % 3 != 0:
             await update.effective_message.reply_text(
-                "Использование: /set_time <день> <время>\n"
-                "День вводить без месяца, только само число.\n"
+                "Использование: /set_time <день> <время> <число игр>\n"
+                "День вводить без месяца, только само число. Можно вводить день недели двумя буквами.\n"
                 "Время можно указывать как с минутами, так и без. При указании с минутами, разделитель не обязателен.\n"
-                "Пример: 19:30 20 числа - /set_time 20 1930\n"
-                "17:00 10 числа - /set_time 10 17"
+                "Пример: 19:30 20 числа, 4 ханчана - /set_time 20 1930 4\n"
+                "17:00 вторник 2 ханчана и 19:00 среда 2 ханчана - /set_time вт 17 2 ср 19 2"
             )
             return
 
-        day, chosen_time = context.args
-
-        games = table.unfinished_games
-        if not games:
+        games_left = len(table.unfinished_games())
+        if not games_left:
             await update.effective_message.reply_text(f"Нет неначатых игр за столом {table.name}.")
             logger.info("No unstarted games at table %s.", table.name)
             return
@@ -193,57 +191,94 @@ class TableHandlers:
                 [context.args],
             )
             return
-        day = int(day)
+
+        weekdays = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
+
+        days = context.args[::3]
+        times = context.args[1::3]
+        lengths = context.args[2::3]
+        start_times = []
+        game_lengths = []
+        success_times = []
+
         timezone = pytz.timezone("Europe/Moscow")
         now = datetime.datetime.now(tz=timezone)
-        time_digits = "".join(ch for ch in chosen_time if ch.isdigit())
-        if len(time_digits) < 3:
-            hour = int(time_digits)
-            minute = 0
-        else:
-            hour = int(time_digits[:-2])
-            minute = int(time_digits[-2:])
-        month = now.month
-        year = now.year
-        if day < now.day:
-            month += 1
-        if month > 12:
-            month -= 12
-            year += 1
-        try:
-            prospective_start = timezone.localize(
-                datetime.datetime(year=year, month=month, day=day, hour=hour, minute=minute)
-            )
-        except ValueError:
-            logger.info(
-                "%s attempted using set_time with args %s. Invalid time: %s.%s.%s %s:%s",
-                user.name,
-                [context.args],
-                year,
-                month,
-                day,
-                hour,
-                minute,
-            )
-            await update.effective_message.reply_text(
-                f"Время не распознано {year}.{month}.{day} {hour}:{minute}"
-            )
-            return
+        for day, time, games in zip(days, times, lengths, strict=False):
+            games = int(games)
+            if games <= 0:
+                await update.effective_message.reply_text(
+                    "Количество игр должно быть положительным."
+                )
+                logger.info("Not positive games at table %s: %s.", table.name, games)
+                return
+            games_left -= games
+            if games_left < 0:
+                await update.effective_message.reply_text("Указано больше игр, чем осталось.")
+                logger.info("Too many games at table %s.", table.name)
+                return
+
+            time_digits = "".join(ch for ch in time if ch.isdigit())
+            if len(time_digits) < 3:
+                hour = int(time_digits)
+                minute = 0
+            else:
+                hour = int(time_digits[:-2])
+                minute = int(time_digits[-2:])
+
+            if day.isnumeric():
+                day = int(day)
+                month = now.month
+                year = now.year
+                if day < now.day:
+                    month += 1
+                if month > 12:
+                    month -= 12
+                    year += 1
+            else:
+                day = day.lower()
+                if day not in weekdays:
+                    await update.effective_message.reply_text(f"День недели не найден {day}.")
+                    logger.info("Weekday not found %s.", day)
+                    return
+                weekday = weekdays.index(day)
+                current_weekday = now.weekday()
+                shift = (weekday - current_weekday) % 7
+                prospective_date = now + datetime.timedelta(days=shift)
+                day = prospective_date.day
+                month = prospective_date.month
+                year = prospective_date.year
+            try:
+                prospective_start = timezone.localize(
+                    datetime.datetime(year=year, month=month, day=day, hour=hour, minute=minute)
+                )
+                start_times.append(int(prospective_start.timestamp()))
+                success_times.append(prospective_start.strftime("%d.%m %H:%M") + f" (игр: {games})")
+                game_lengths.append(games)
+            except ValueError:
+                logger.info(
+                    "%s attempted using set_time with args %s. Invalid time: %s.%s.%s %s:%s",
+                    user.name,
+                    [context.args],
+                    year,
+                    month,
+                    day,
+                    hour,
+                    minute,
+                )
+                await update.effective_message.reply_text(
+                    f"Время не распознано {year}.{month}.{day} {hour}:{minute}"
+                )
+                return
+        cutoff = now + datetime.timedelta(hours=12)
+        cutoff = int(cutoff.timestamp())
         self.tables.set_table_time(
-            table_id=table.table_id, timestamp=int(prospective_start.timestamp())
-        )
-        logger.info(
-            "%s used set_time with args %s. Time set: %s.%s.%s %s:%s",
-            user.name,
-            [context.args],
-            year,
-            month,
-            day,
-            hour,
-            minute,
+            table_id=table.table_id,
+            timestamps=start_times,
+            reminder_cutoff=cutoff,
+            lengths=game_lengths,
         )
         await update.effective_message.reply_text(
-            f"Время установлено: {prospective_start.strftime('%d.%m %H:%M')}"
+            f"Время установлено: \n{'\n'.join(success_times)}"
         )
 
     @command_handler("remove_time")
@@ -267,7 +302,11 @@ class TableHandlers:
                 [context.args],
             )
             return
-        self.tables.set_table_time(table_id=table.table_id, timestamp=0)
+        timezone = pytz.timezone("Europe/Moscow")
+        now = datetime.datetime.now(tz=timezone)
+        cutoff = now + datetime.timedelta(hours=12)
+        cutoff = int(cutoff.timestamp())
+        self.tables.set_table_time(table_id=table.table_id, timestamps=[], reminder_cutoff=cutoff)
         logger.info("%s used remove_time for table %s.", user.name, [table.table_id])
         await update.effective_message.reply_text("Время удалено.")
 
@@ -285,19 +324,10 @@ class TableHandlers:
             return
 
         now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
-        cutoff = now - datetime.timedelta(hours=3)
-        tables = self.tables.get_unfinished_visible_tables()
-        tables.sort(key=lambda el: el.table_id)
-        unknown_ids = [
-            table.name for table in tables if not table.time or table.time < cutoff.timestamp()
-        ]
-        known = [table for table in tables if table.time and table.time >= cutoff.timestamp()]
-        known.sort(key=lambda el: el.time)
-        known_str = "".join([table_string(i, explicit=True) for i in known])
-        unknown_str = ", ".join(map(str, sorted(unknown_ids)))
+        cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
+        known_times = self.tables.get_all_relevant_table_times(left_cutoff=cutoff)
+        known_str = "".join([table_time_string(i, explicit=True) for i in known_times])
         ans = known_str
-        if unknown_str:
-            ans += "Время неизвестно: " + unknown_str
         if ans == "":
             ans = "Игр нет"
         await update.effective_message.reply_text(ans, parse_mode=ParseMode.HTML)

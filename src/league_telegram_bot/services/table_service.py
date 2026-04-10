@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sqlalchemy import delete
+
 from .. import models
 from .session import SessionProvider
 
@@ -43,11 +45,26 @@ class TableService:
             return table
         return None
 
-    def set_table_time(self, table_id: int, timestamp: int):
+    def set_table_time(
+        self, table_id: int, timestamps: list[int], lengths: list[int], reminder_cutoff: int
+    ):
         table = self._session_provider.session.get(models.Table, table_id)
         if table is None:
             return False
-        table.time = timestamp
+        self._session_provider.session.execute(
+            delete(models.TableTime).where(models.TableTime.table_id == table_id)
+        )
+        time_objects = []
+        for timestamp, games in zip(timestamps, lengths, strict=False):
+            need_reminder = 1
+            if timestamp < reminder_cutoff:
+                need_reminder = 0
+            time_objects.append(
+                models.TableTime(
+                    table_id=table_id, time=timestamp, need_reminder=need_reminder, games=games
+                )
+            )
+        self._session_provider.session.add_all(time_objects)
         self._session_provider.session.commit()
         return True
 
@@ -63,7 +80,25 @@ class TableService:
 
     def get_unfinished_visible_tables(self):
         tables = self._session_provider.session.query(models.Table).all()
-        return [table for table in tables if table.unfinished_games and table.visible]
+        return [
+            table
+            for table in tables
+            if table.unfinished_games and table.visible and table.event.started
+        ]
+
+    def get_all_relevant_table_times(self, left_cutoff=None, right_cutoff=None):
+        times = (
+            self._session_provider.session.query(models.TableTime)
+            .join(models.TableTime.table)
+            .join(models.Table.event)
+            .filter(models.Event.started == 1)
+        )
+        if left_cutoff:
+            times = times.filter(models.TableTime.time >= left_cutoff)
+        if right_cutoff:
+            times = times.filter(models.TableTime.time <= right_cutoff)
+        times_list = times.order_by(models.TableTime.time, models.TableTime.table_id).all()
+        return times_list
 
     def reveal_table(self, table_id: int, cache: bool = False):
         table = self._session_provider.session.get(models.Table, table_id)

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import datetime
+from typing import TYPE_CHECKING
 
 import pytz
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+if TYPE_CHECKING:
+    from ..models import TableTime
 
 ready_button_reply_markup = InlineKeyboardMarkup(
     [
@@ -37,11 +41,12 @@ def timestring_from_timestamp(timestamp: int, weekday: bool = False, day: bool =
     return res
 
 
-def table_string(table, mention: bool = False, explicit: bool = True) -> str:
+def table_time_string(table_time: TableTime, mention: bool = False, explicit: bool = True) -> str:
+    table = table_time.table
     ans = (
-        timestring_from_timestamp(table.time, weekday=explicit, day=explicit)
+        timestring_from_timestamp(table_time.time, weekday=explicit, day=explicit)
         + " - "
-        + f"Стол {table.name}:\n"
+        + f"Стол {table.name} (ханчанов: {table_time.games}):\n"
     )
     for i, player in enumerate(table.players()):
         if mention:
@@ -55,3 +60,13 @@ def table_string(table, mention: bool = False, explicit: bool = True) -> str:
         else:
             ans += ".\n\n"
     return ans
+
+
+def game_amount_string(games: int):
+    forms = ["ханчан", "ханчана", "ханчанов"]
+    if games % 10 == 1:
+        return f"{games} {forms[0]}"
+    elif 4 >= games % 10 >= 2:
+        return f"{games} {forms[1]}"
+    else:
+        return f"{games} {forms[2]}"
