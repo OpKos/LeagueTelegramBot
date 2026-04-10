@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 
 from ..integrations.pantheon import PantheonClient
 from ..leaderboard import make_leaderboard
+from .timetable_image import create_timetable_image
 from .utils import timestring_from_timestamp
 
 logger = logging.getLogger()
@@ -62,6 +63,17 @@ async def send_daily_chat_message(context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.info(
                 f"Для события {event.event_id} ошибка {result.get("error", "неизвестная ошибка")}"
             )
+
+    timezone = pytz.timezone("Europe/Moscow")
+    now = datetime.datetime.now(tz=timezone)
+    cutoff = now + datetime.timedelta(hours=30)
+    cutoff = int(cutoff.timestamp())
+    timetable = handlers.tables.get_all_relevant_table_times(
+        right_cutoff=cutoff, left_cutoff=int(now.timestamp())
+    )
+    if timetable:
+        tt_image = create_timetable_image(timetable, "timetable.png")
+        image_links.append(tt_image)
 
     if len(image_links) == 1:
         await context.bot.send_photo(chat_id=handlers.chat, photo=image_links[0])
