@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from .decorators import callback_query_handler, command_handler
@@ -37,10 +36,9 @@ class ChatHandlers:
             logger.error(e)
             return
         for player in table.players():
-            try:
-                member = await chat.get_member(player.telegram_id)
-                logger.info(member)
-            except BadRequest:
+            member = await chat.get_member(player.telegram_id)
+            logger.info(member)
+            if str(member.status).lower() == "left":
                 try:
                     await context.bot.send_message(
                         chat_id=player.telegram_id,
