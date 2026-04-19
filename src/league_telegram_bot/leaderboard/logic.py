@@ -21,7 +21,7 @@ def make_leaderboard(event: models.Event, pantheon_data: list) -> str:
         player_data["name"] = player.irl_name
         player_data["group"] = event_player.leaderboard_group
         relevant_players.append(player_data)
-    relevant_players.sort(key=lambda el: (el["group"], -el["score"]))
+    relevant_players.sort(key=lambda el: (el["group"], -el["score"], el["name"]))
     player_data = [
         (player["name"], player["score"], player["games"]) for player in relevant_players
     ]
