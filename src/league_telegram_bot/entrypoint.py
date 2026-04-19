@@ -59,7 +59,7 @@ def main() -> None:
 
     token = load_token(config.token_path)
     application = build_application(token, handlers)
-    application.job_queue.run_once(startup_job_callback, when=0, data={"handlers": handlers})
+    application.job_queue.run_once(startup_job_callback, when=30, data={"handlers": handlers})
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
