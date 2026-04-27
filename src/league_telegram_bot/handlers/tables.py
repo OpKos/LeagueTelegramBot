@@ -306,7 +306,9 @@ class TableHandlers:
         now = datetime.datetime.now(tz=timezone)
         cutoff = now + datetime.timedelta(hours=12)
         cutoff = int(cutoff.timestamp())
-        self.tables.set_table_time(table_id=table.table_id, timestamps=[], reminder_cutoff=cutoff)
+        self.tables.set_table_time(
+            table_id=table.table_id, timestamps=[], reminder_cutoff=cutoff, lengths=[]
+        )
         logger.info("%s used remove_time for table %s.", user.name, [table.table_id])
         await update.effective_message.reply_text("Время удалено.")
 
