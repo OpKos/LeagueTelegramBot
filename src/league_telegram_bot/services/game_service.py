@@ -29,6 +29,7 @@ class GameService:
         assert game
         game.started = status
         self._session_provider.session.commit()
+        return True
 
     def get_games_status(self):
         started = (

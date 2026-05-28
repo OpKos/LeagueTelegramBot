@@ -46,7 +46,7 @@ class AdminHandlers:
 
         success = self.games.set_game_status(game_id, status)
         if success:
-            status_text = "started" if status == "1" else "not started"
+            status_text = "started" if status != 0 else "not started"
             await update.effective_message.reply_text(
                 f"Статус игры с ID {game_id} успешно обновлен на '{status_text}'."
             )
