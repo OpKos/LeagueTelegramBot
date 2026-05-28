@@ -28,14 +28,12 @@ class TableHandlers:
             )
             return
 
-        game = self.tables.get_table_first_game(table_id=table.table_id)
-        if not game:
-            await update.effective_message.reply_text(f"Нет неначатых игр за столом {table.name}")
-            logger.info(f"Нет игр за столом {table.name}")
+        if not table.unfinished_games():
+            await update.effective_message.reply_text(text="Все игры за столом сыграны")
             return
 
-        game_string = self.games.get_game_string(game_id=game.game_id)
-        await update.message.reply_text(game_string, reply_markup=self._ready_button_reply_markup)
+        msg = self.games.get_table_ready_string(table_id=table.table_id)
+        await update.message.reply_text(msg, reply_markup=self._ready_button_reply_markup)
 
     @callback_query_handler(pattern=r"^RB")
     async def ready_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -51,8 +49,7 @@ class TableHandlers:
         user = update.effective_user
         player = self.players.get_player(telegram_id=user.id)
         table = self.tables.get_table(chat_id=chat_id)
-        game = self.tables.get_table_first_game(table_id=table.table_id)
-        if not game:
+        if not table.unfinished_games():
             await query.edit_message_text(text="Все игры за столом сыграны")
             return
         if status == "Ready":
@@ -61,10 +58,14 @@ class TableHandlers:
         else:
             logger.info("User %s pressed unready button", user.username)
             self.ready.set_player_unready(player.p_id)
-        msg = self.games.get_game_string(game_id=game.game_id)
+        msg = self.games.get_table_ready_string(table_id=table.table_id)
         await query.edit_message_text(text=msg, reply_markup=self._ready_button_reply_markup)
-        rdy = self.games.check_game_ready(game_id=game.game_id)
-        if rdy:
+        ready_games = []
+        for game in table.unfinished_games():
+            if self.games.check_game_ready(game_id=game.game_id):
+                ready_games.append(game)
+        if ready_games:
+            game = ready_games[0]
             player_nicks = [p.tenhou_name for p in game.players()]
             result, missed_players, success = self.tenhou_client.start_game(player_nicks)
             logger.info(
@@ -88,7 +89,7 @@ class TableHandlers:
                 for nick in missed_players:
                     p = self.players.get_player(tenhou_name=nick)
                     self.ready.set_player_unready(p.p_id)
-                msg = self.games.get_game_string(game_id=game.game_id)
+                msg = self.games.get_table_ready_string(table_id=table.table_id)
                 await query.edit_message_text(
                     text=msg, reply_markup=self._ready_button_reply_markup
                 )
