@@ -34,11 +34,21 @@ class Table(Base):
     table_times: Mapped[list[TableTime]] = relationship(back_populates="table", lazy="subquery")
 
     def unfinished_games(self):
+        self.games.sort(key=lambda game: game.game_id)
         return [g for g in self.games if g.started == 0]
 
     def players(self):
         self.players_seats.sort(key=lambda tp: tp.seat)
         return [tp.player for tp in self.players_seats]
+
+    def get_unfinished_players(self):
+        games = self.unfinished_games()
+        players = []
+        for game in games:
+            for player in game.players():
+                if player not in players:
+                    players.append(player)
+        return players
 
     def get_event_players(self):
         res = []
