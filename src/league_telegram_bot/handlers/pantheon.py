@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ..integrations.pantheon import PantheonClient
-from ..leaderboard.logic import make_leaderboard
+from ..leaderboard.logic import get_leaderboard_image
 from ..models import Event
 from .decorators import command_handler
 
@@ -109,7 +109,7 @@ class PantheonHandlers:
             event_id_list=[event.pantheon_id], order="desc", order_by="rating"
         )
         if result.get("ok"):
-            image_link = make_leaderboard(event=event, pantheon_data=result.get("players"))
+            image_link = get_leaderboard_image(event=event, pantheon_data=result.get("players"))
             await update.effective_message.chat.send_photo(photo=image_link)
             return
         error = result.get("error", "неизвестная ошибка")

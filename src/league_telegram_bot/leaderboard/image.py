@@ -61,7 +61,7 @@ def create_leaderboard_image(
     top += time_h
 
     for place, player in enumerate(data, 1):
-        name, score, games = player
+        name, score, games, p_id = player
         left = margin
         d.text(
             anchor="mm",
