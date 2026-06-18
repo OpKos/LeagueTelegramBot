@@ -10,7 +10,7 @@ from ..integrations.event_portal import event_portal_update
 from ..integrations.pantheon import PantheonClient
 from ..leaderboard.logic import get_leaderboard_data
 from ..seating.image import create_seating_image
-from ..seating.logic import create_seating
+from ..seating.logic import add_table, create_seating
 from .decorators import command_handler
 
 logger = logging.getLogger()
@@ -310,4 +310,42 @@ class AdminHandlers:
         for player in leaderboard[cutoff:]:
             player_ids.append(player[3])
         self.players.edit_event_players_leaderboard_group(event_id=event_id, player_ids=player_ids)
+        await update.effective_message.reply_text("Успешно")
+
+    @command_handler("add_table")
+    async def add_table_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        event_id = int(context.args[0])
+        cutoff = int(context.args[1]) - 1
+        amount = int(context.args[2])
+        table_name = context.args[3]
+
+        event = self.events.get_event(event_id)
+        api_url = os.getenv("PANTHEON_GAME_API_URL", "https://gameapi.riichimahjong.org")
+        client = PantheonClient(
+            api_url,
+            server_path_prefix="/v2",
+        )
+        pantheon_data = client.get_rating_table(
+            event_id_list=[event.pantheon_id], order="desc", order_by="rating"
+        ).get("players")
+        leaderboard = get_leaderboard_data(event, pantheon_data)
+        player_ids = []
+        for player in leaderboard[cutoff : cutoff + amount]:
+            player_ids.append(player[3])
+        players = [self.players.get_player(p_id=el) for el in player_ids]
+        add_table(
+            tables=self.tables,
+            games=self.games,
+            players=players,
+            event=event,
+            table_name=table_name,
+        )
         await update.effective_message.reply_text("Успешно")
