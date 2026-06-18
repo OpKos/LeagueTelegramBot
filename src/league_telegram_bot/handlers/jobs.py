@@ -9,7 +9,7 @@ from telegram import InputMediaPhoto
 from telegram.ext import ContextTypes
 
 from ..integrations.pantheon import PantheonClient
-from ..leaderboard import make_leaderboard
+from ..leaderboard import get_leaderboard_image
 from .timetable_image import create_timetable_image
 from .utils import timestring_from_timestamp
 
@@ -68,7 +68,7 @@ async def send_daily_chat_message(context: ContextTypes.DEFAULT_TYPE) -> None:
             event_id_list=[event.pantheon_id], order="desc", order_by="rating"
         )
         if result.get("ok"):
-            image_link = make_leaderboard(event=event, pantheon_data=result.get("players"))
+            image_link = get_leaderboard_image(event=event, pantheon_data=result.get("players"))
             image_links.append(image_link)
             logger.info(f"Создана таблица {image_link} для события {event.event_id}")
         else:

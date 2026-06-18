@@ -1,4 +1,4 @@
 from .image import create_leaderboard_image
-from .logic import make_leaderboard
+from .logic import get_leaderboard_image
 
-__all__ = ["make_leaderboard", "create_leaderboard_image"]
+__all__ = ["get_leaderboard_image", "create_leaderboard_image"]

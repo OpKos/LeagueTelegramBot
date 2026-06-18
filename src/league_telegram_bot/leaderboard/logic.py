@@ -7,7 +7,7 @@ from .. import models
 from . import create_leaderboard_image
 
 
-def make_leaderboard(event: models.Event, pantheon_data: list) -> str:
+def get_leaderboard_data(event: models.Event, pantheon_data: list) -> list:
     pantheon_players = {}
     for player_in_event in pantheon_data:
         player_id: int = player_in_event.get("id", 0)
@@ -25,6 +25,11 @@ def make_leaderboard(event: models.Event, pantheon_data: list) -> str:
     player_data = [
         (player["name"], player["score"], player["games"]) for player in relevant_players
     ]
+    return player_data
+
+
+def get_leaderboard_image(event: models.Event, pantheon_data: list) -> str:
+    player_data = get_leaderboard_data(event, pantheon_data)
     finished_games = 0
     total_games = 0
     for table in event.tables:
