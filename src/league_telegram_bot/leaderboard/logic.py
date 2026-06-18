@@ -20,10 +20,12 @@ def get_leaderboard_data(event: models.Event, pantheon_data: list) -> list:
         player_data = pantheon_players.get(player.pantheon_id, {"score": 0, "games": 0})
         player_data["name"] = player.irl_name
         player_data["group"] = event_player.leaderboard_group
+        player_data["p_id"] = event_player.p_id
         relevant_players.append(player_data)
     relevant_players.sort(key=lambda el: (el["group"], -el["score"], el["name"]))
     player_data = [
-        (player["name"], player["score"], player["games"]) for player in relevant_players
+        (player["name"], player["score"], player["games"], player["p_id"])
+        for player in relevant_players
     ]
     return player_data
 

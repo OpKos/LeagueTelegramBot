@@ -68,6 +68,19 @@ class PlayerService:
         self._session_provider.session.commit()
         return False
 
+    def edit_event_players_leaderboard_group(
+        self, event_id: int, player_ids: list[int], increment: int = 1
+    ):
+        event_players = (
+            self._session_provider.session.query(models.EventPlayer)
+            .filter(models.EventPlayer.event_id == event_id)
+            .filter(models.EventPlayer.p_id.in_(player_ids))
+            .all()
+        )
+        for ep in event_players:
+            ep.leaderboard_group += increment
+        self._session_provider.session.commit()
+
     def set_language(self, p_id: int, lang: str):
         player = self._session_provider.session.get(models.Player, p_id)
         if player:
