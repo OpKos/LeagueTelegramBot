@@ -13,6 +13,14 @@ FOUR_SEAT_ORDERS = [
     [2, 0, 3, 1],
     [3, 2, 1, 0],
 ]
+SIX_SEAT_ORDERS = [
+    [0, 2, 3, 1],
+    [2, 0, 1, 3],
+    [1, 4, 0, 5],
+    [4, 1, 5, 0],
+    [3, 5, 2, 4],
+    [5, 3, 4, 2],
+]
 
 
 # ======================
@@ -235,3 +243,25 @@ def create_seating(tables: TableService, games: GameService, event: models.Event
             for order in FOUR_SEAT_ORDERS:
                 game_order = [table_order[i] for i in order]
                 games.create_game_with_players(table_id=table.table_id, players=game_order)
+
+
+def add_table(
+    tables: TableService,
+    games: GameService,
+    players: list[models.Player],
+    event: models.Event,
+    table_name: str,
+    deadline_group: int = 0,
+):
+    table = tables.create_table_with_players(
+        event_id=event.event_id,
+        table_name=table_name,
+        players=players,
+        deadline_group=deadline_group,
+    )
+    schema = FOUR_SEAT_ORDERS
+    if len(players) == 6:
+        schema = SIX_SEAT_ORDERS
+    for order in schema:
+        game_order = [players[i] for i in order]
+        games.create_game_with_players(table_id=table.table_id, players=game_order)
