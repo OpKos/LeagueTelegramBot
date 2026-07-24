@@ -31,6 +31,17 @@ class GameService:
         self._session_provider.session.commit()
         return True
 
+    def replace_game_player(self, game_id: int, seat: int, player_id: int):
+        game_player = (
+            self._session_provider.session.query(models.GamePlayer)
+            .where(models.GamePlayer.game_id == game_id)
+            .where(models.GamePlayer.seat == seat)
+            .one()
+        )
+        game_player.p_id = player_id
+        self._session_provider.session.commit()
+        return True
+
     def get_games_status(self):
         started = (
             self._session_provider.session.query(models.Game)

@@ -72,6 +72,49 @@ class AdminHandlers:
                 status,
             )
 
+    @command_handler("replace_player")
+    async def replace_player_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+
+        logger.info(
+            "User %s (%s) uses command %s with args %s.",
+            user.username,
+            user.id,
+            "replace_player",
+            str(context.args),
+        )
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        if not context.args or len(context.args) != 3:
+            await update.effective_message.reply_text(
+                "Usage: /replace_player <game_id> <seat> <player_id>"
+            )
+            return
+
+        game_id = int(context.args[0])
+        seat = int(context.args[1])
+        player_id = int(context.args[2])
+
+        self.games.replace_game_player(game_id=game_id, seat=seat, player_id=player_id)
+        await update.effective_message.reply_text("Игрок успешно заменён.")
+        logger.info(
+            "Admin %s (%s) set player in game %s (seat %s) to %s.",
+            user.username,
+            user.id,
+            game_id,
+            seat,
+            player_id,
+        )
+
     @command_handler("get_logs")
     async def get_logs_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Отправляет файл с логами администратору."""
