@@ -35,7 +35,6 @@ class BaseHandlers:
         self.games = GameService(self.session_manager, ready_service=self.ready)
         self.reveal = RevealService(self.session_manager, table_service=self.tables)
         self.tenhou_client = TenhouClient(lobby=config.lobby, game_type="0009", is_enable=True)
-        self.admin_ids = set(config.admin_ids)
         self.lobby = config.lobby
         self.chat = config.chat
         self.locales = locales
@@ -56,7 +55,8 @@ class BaseHandlers:
 
     def is_admin(self, user_id: int) -> bool:
         """Проверяет, является ли пользователь администратором."""
-        return user_id in self.admin_ids
+        player = self.players.get_player(telegram_id=user_id)
+        return player and player.is_admin
 
     def tr(self, lang: str, key: str, **kwargs) -> str:
         template = self.locales.get(key).get(lang)
