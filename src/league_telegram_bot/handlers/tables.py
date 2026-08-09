@@ -281,10 +281,16 @@ class TableHandlers:
         await update.effective_message.reply_text(
             f"Время установлено: \n{'\n'.join(success_times)}"
         )
+        for time in success_times:
+            await update.effective_message.chat.send_poll(
+                question=time,
+                options=["Согласен играть в это время"],
+                allows_revoting=False,
+                is_anonymous=False,
+            )
 
     @command_handler("remove_time")
     async def remove_time_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Обновляет статус игры (только для администраторов)."""
         user = update.effective_user
 
         table = self.tables.get_table(chat_id=update.effective_message.chat_id)
