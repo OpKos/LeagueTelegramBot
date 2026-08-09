@@ -13,6 +13,7 @@ from .settings import build_database_url, load_database_settings
 class AppConfig:
     lobby: str
     chat: str
+    admin_chat: str
     database_url: str
     config_path: Path
     locales_path: Path
@@ -27,11 +28,13 @@ def load_app_config() -> AppConfig:
 
     lobby = parser.get("Settings", "lobby")
     chat = parser.get("Settings", "chat")
+    admin_chat = parser.get("Settings", "admin_chat")
     database_url = build_database_url(load_database_settings())
 
     return AppConfig(
         lobby=lobby,
         chat=chat,
+        admin_chat=admin_chat,
         database_url=database_url,
         config_path=config_path,
         locales_path=app_path("locales.json"),

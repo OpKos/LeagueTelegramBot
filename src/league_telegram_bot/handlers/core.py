@@ -37,6 +37,7 @@ class BaseHandlers:
         self.tenhou_client = TenhouClient(lobby=config.lobby, game_type="0009", is_enable=True)
         self.lobby = config.lobby
         self.chat = config.chat
+        self.admin_chat = config.admin_chat
         self.locales = locales
         self.settings_path = config.config_path
         self._ready_button_reply_markup = ready_button_reply_markup
