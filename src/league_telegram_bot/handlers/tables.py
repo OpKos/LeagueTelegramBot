@@ -334,3 +334,33 @@ class TableHandlers:
         if ans == "":
             ans = "Игр нет"
         await update.effective_message.reply_text(ans, parse_mode=ParseMode.HTML)
+
+    @command_handler("judge_call")
+    async def judge_call_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+
+        table = self.tables.get_table(chat_id=update.effective_message.chat_id)
+        if not table:
+            await update.effective_message.reply_text(
+                "У чата не указан стол, используйте /set_chat"
+            )
+            return
+
+        player = self.players.get_player(telegram_id=user.id)
+        if not player:
+            await update.effective_message.reply_text("Вы не зарегистрированы в системе")
+            return
+
+        try:
+            link = await context.bot.create_chat_invite_link(chat_id=table.chat_id)
+        except Exception as e:
+            await update.effective_message.reply_text("Ошибка генерации ссылки")
+            logger.error(e)
+            return
+        admin_list = self.players.get_admins()
+        msg = [f"{player.irl_name} вызывает админа за стол {table.name}\n{link.invite_link}\n"]
+        for admin in admin_list:
+            msg.append(admin.dirty_mention() + " ")
+        msg = "".join(msg)
+        await context.bot.send_message(chat_id=self.admin_chat, text=msg)
+        await update.effective_message.reply_text("Вызвал админа за стол")
