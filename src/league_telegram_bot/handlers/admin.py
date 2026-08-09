@@ -392,3 +392,30 @@ class AdminHandlers:
             table_name=table_name,
         )
         await update.effective_message.reply_text("Успешно")
+
+    @command_handler("table_chat")
+    async def table_chat_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        if not context.args or len(context.args) != 1:
+            await update.effective_message.reply_text("Использование: /table_chat <table_id>")
+            return
+
+        table_name = context.args[0]
+        table = self.tables.get_table(table_name=table_name)
+        if not table:
+            await update.effective_message.reply_text("Стол не найден.")
+            return
+        try:
+            link = await context.bot.create_chat_invite_link(chat_id=table.chat_id)
+        except Exception as e:
+            await update.effective_message.reply_text("Ошибка генерации ссылки")
+            logger.error(e)
+            return
+        await update.effective_message.reply_text(link.invite_link)
