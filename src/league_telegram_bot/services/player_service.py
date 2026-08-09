@@ -49,6 +49,12 @@ class PlayerService:
             query = query.filter(models.Player.tenhou_name == tenhou_name)
         return query.first()
 
+    def get_admins(self):
+        query = self._session_provider.session.query(models.Player).filter(
+            models.Player.is_admin == 1
+        )
+        return query.all()
+
     def set_target_tables(self, p_id: int, goal: int = 1, full: bool = False):
         player = self._session_provider.session.get(models.Player, p_id)
         if player:
