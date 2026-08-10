@@ -37,6 +37,7 @@ def event_portal_update(players: PlayerService, events: EventService, event: mod
             if not db_player.irl_name:
                 players.fill_player_data(db_player.p_id, name)
             res.append(f"player updated in database: {name}")
+            include = True
             if include:
                 table_minimum = 10000 if db_player.full_ready == 1 else 0
                 events.add_event_player(
