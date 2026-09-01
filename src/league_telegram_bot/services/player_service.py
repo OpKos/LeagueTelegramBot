@@ -49,6 +49,12 @@ class PlayerService:
             query = query.filter(models.Player.tenhou_name == tenhou_name)
         return query.first()
 
+    def get_admins(self):
+        query = self._session_provider.session.query(models.Player).filter(
+            models.Player.is_admin == 1
+        )
+        return query.all()
+
     def set_target_tables(self, p_id: int, goal: int = 1, full: bool = False):
         player = self._session_provider.session.get(models.Player, p_id)
         if player:
@@ -68,10 +74,39 @@ class PlayerService:
         self._session_provider.session.commit()
         return False
 
+    def edit_event_players_leaderboard_group(
+        self, event_id: int, player_ids: list[int], increment: int = 1
+    ):
+        event_players = (
+            self._session_provider.session.query(models.EventPlayer)
+            .filter(models.EventPlayer.event_id == event_id)
+            .filter(models.EventPlayer.p_id.in_(player_ids))
+            .all()
+        )
+        for ep in event_players:
+            ep.leaderboard_group += increment
+        self._session_provider.session.commit()
+
     def set_language(self, p_id: int, lang: str):
         player = self._session_provider.session.get(models.Player, p_id)
         if player:
             player.language = lang
+            self._session_provider.session.commit()
+            return True
+        return False
+
+    def get_unfilled_pantheon_players(self):
+        players = (
+            self._session_provider.session.query(models.Player)
+            .filter(models.Player.pantheon_id.is_(None))
+            .limit(20)
+        )
+        return players
+
+    def set_pantheon_id(self, p_id: int, pantheon_id: int):
+        player = self._session_provider.session.get(models.Player, p_id)
+        if player:
+            player.pantheon_id = pantheon_id
             self._session_provider.session.commit()
             return True
         return False

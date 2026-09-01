@@ -12,8 +12,8 @@ from .settings import build_database_url, load_database_settings
 @dataclass(frozen=True)
 class AppConfig:
     lobby: str
-    pantheon: str
-    admin_ids: tuple[int, ...]
+    chat: str
+    admin_chat: str
     database_url: str
     config_path: Path
     locales_path: Path
@@ -27,16 +27,14 @@ def load_app_config() -> AppConfig:
     parser.read(config_path)
 
     lobby = parser.get("Settings", "lobby")
-    pantheon = parser.get("Settings", "pantheon")
-    admin_ids = tuple(
-        int(parser.get("Admins", key)) for key in parser["Admins"] if key.startswith("tg_id")
-    )
+    chat = parser.get("Settings", "chat")
+    admin_chat = parser.get("Settings", "admin_chat")
     database_url = build_database_url(load_database_settings())
 
     return AppConfig(
         lobby=lobby,
-        pantheon=pantheon,
-        admin_ids=admin_ids,
+        chat=chat,
+        admin_chat=admin_chat,
         database_url=database_url,
         config_path=config_path,
         locales_path=app_path("locales.json"),

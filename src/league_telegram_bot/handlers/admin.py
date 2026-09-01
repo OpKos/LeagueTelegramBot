@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import datetime
 import logging
+import os
 
-import pytz
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from ..integrations.event_portal import event_portal_update
+from ..integrations.pantheon import PantheonClient
+from ..leaderboard.logic import get_leaderboard_data
 from ..seating.image import create_seating_image
-from ..seating.logic import create_seating
+from ..seating.logic import add_table, create_seating
 from .decorators import command_handler
 
 logger = logging.getLogger()
@@ -48,7 +49,7 @@ class AdminHandlers:
 
         success = self.games.set_game_status(game_id, status)
         if success:
-            status_text = "started" if status == "1" else "not started"
+            status_text = "started" if status != 0 else "not started"
             await update.effective_message.reply_text(
                 f"Статус игры с ID {game_id} успешно обновлен на '{status_text}'."
             )
@@ -70,6 +71,49 @@ class AdminHandlers:
                 game_id,
                 status,
             )
+
+    @command_handler("replace_player")
+    async def replace_player_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+
+        logger.info(
+            "User %s (%s) uses command %s with args %s.",
+            user.username,
+            user.id,
+            "replace_player",
+            str(context.args),
+        )
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        if not context.args or len(context.args) != 3:
+            await update.effective_message.reply_text(
+                "Usage: /replace_player <game_id> <seat> <player_id>"
+            )
+            return
+
+        game_id = int(context.args[0])
+        seat = int(context.args[1])
+        player_id = int(context.args[2])
+
+        self.games.replace_game_player(game_id=game_id, seat=seat, player_id=player_id)
+        await update.effective_message.reply_text("Игрок успешно заменён.")
+        logger.info(
+            "Admin %s (%s) set player in game %s (seat %s) to %s.",
+            user.username,
+            user.id,
+            game_id,
+            seat,
+            player_id,
+        )
 
     @command_handler("get_logs")
     async def get_logs_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -139,33 +183,6 @@ class AdminHandlers:
             return
 
         await self.send_game_status_message(context)
-
-    @command_handler("start_status_message")
-    async def start_status_message_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
-        user = update.effective_user
-        assert user
-        assert update.effective_message
-        assert context.job_queue
-
-        if not self.is_admin(user.id):
-            await update.effective_message.reply_text(
-                "Эта команда доступна только администраторам."
-            )
-            return
-
-        chat_id = update.effective_message.chat_id
-        tz = pytz.timezone("Europe/Moscow")
-        callback_time = datetime.time(hour=10, minute=0, tzinfo=tz)
-        context.job_queue.run_daily(
-            self.send_game_status_message,
-            time=callback_time,
-            chat_id="@kawaleague",
-            name=str(chat_id),
-        )
-        text = "Timer successfully set!"
-        await update.effective_message.reply_text(text)
 
     async def reload_session_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -291,10 +308,114 @@ class AdminHandlers:
             )
             return
 
-        event = self.events.get_event(int(context.args[0]))
+        events = self.events.get_signup_events()
         logger.info(
-            "Admin %s (%s) requested image for event %s", user.username, user.id, event.event_id
+            "Admin %s (%s) requested image for deadline group %s",
+            user.username,
+            user.id,
+            context.args[0],
         )
-        create_seating_image(event)
+        create_seating_image(
+            events=events,
+            deadline_group=int(context.args[0]),
+            filename="seating.png",
+            header=" ".join(context.args[1:]),
+        )
         with open("seating.png", "rb") as image_file:
             await update.effective_message.reply_document(document=image_file)
+
+    @command_handler("split_leaderboard")
+    async def split_leaderboard_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        user = update.effective_user
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        event_id = int(context.args[0])
+        cutoff = int(context.args[1])
+
+        event = self.events.get_event(event_id)
+        api_url = os.getenv("PANTHEON_GAME_API_URL", "https://gameapi.riichimahjong.org")
+        client = PantheonClient(
+            api_url,
+            server_path_prefix="/v2",
+        )
+        pantheon_data = client.get_rating_table(
+            event_id_list=[event.pantheon_id], order="desc", order_by="rating"
+        ).get("players")
+        leaderboard = get_leaderboard_data(event, pantheon_data)
+        player_ids = []
+        for player in leaderboard[cutoff:]:
+            player_ids.append(player[3])
+        self.players.edit_event_players_leaderboard_group(event_id=event_id, player_ids=player_ids)
+        await update.effective_message.reply_text("Успешно")
+
+    @command_handler("add_table")
+    async def add_table_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        event_id = int(context.args[0])
+        cutoff = int(context.args[1]) - 1
+        amount = int(context.args[2])
+        table_name = context.args[3]
+
+        event = self.events.get_event(event_id)
+        api_url = os.getenv("PANTHEON_GAME_API_URL", "https://gameapi.riichimahjong.org")
+        client = PantheonClient(
+            api_url,
+            server_path_prefix="/v2",
+        )
+        pantheon_data = client.get_rating_table(
+            event_id_list=[event.pantheon_id], order="desc", order_by="rating"
+        ).get("players")
+        leaderboard = get_leaderboard_data(event, pantheon_data)
+        player_ids = []
+        for player in leaderboard[cutoff : cutoff + amount]:
+            player_ids.append(player[3])
+        players = [self.players.get_player(p_id=el) for el in player_ids]
+        add_table(
+            tables=self.tables,
+            games=self.games,
+            players=players,
+            event=event,
+            table_name=table_name,
+        )
+        await update.effective_message.reply_text("Успешно")
+
+    @command_handler("table_chat")
+    async def table_chat_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+
+        if not self.is_admin(user.id):
+            await update.effective_message.reply_text(
+                "Эта команда доступна только администраторам."
+            )
+            return
+
+        if not context.args or len(context.args) != 1:
+            await update.effective_message.reply_text("Использование: /table_chat <table_id>")
+            return
+
+        table_name = context.args[0]
+        table = self.tables.get_table(table_name=table_name)
+        if not table:
+            await update.effective_message.reply_text("Стол не найден.")
+            return
+        try:
+            link = await context.bot.create_chat_invite_link(chat_id=table.chat_id)
+        except Exception as e:
+            await update.effective_message.reply_text("Ошибка генерации ссылки")
+            logger.error(e)
+            return
+        await update.effective_message.reply_text(link.invite_link)

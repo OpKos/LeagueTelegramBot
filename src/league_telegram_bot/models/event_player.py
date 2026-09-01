@@ -18,6 +18,7 @@ class EventPlayer(Base):
     p_id: Mapped[int] = mapped_column(ForeignKey("players.p_id"), primary_key=True)
     table_minimum: Mapped[int] = mapped_column(insert_default=0, server_default=text("0"))
     reveal_enabled: Mapped[int] = mapped_column(insert_default=1, server_default=text("1"))
+    leaderboard_group: Mapped[int] = mapped_column(insert_default=0, server_default=text("0"))
     event: Mapped[Event] = relationship(back_populates="event_players", lazy="subquery")
     player: Mapped[Player] = relationship(back_populates="player_events", lazy="subquery")
 

@@ -23,6 +23,7 @@ class TenhouClient:
             "Origin": "https://tenhou.net",
             "Content-Type": "text/plain;charset=UTF-8",
             "Referer": f"https://tenhou.net/cs/edit/?{self.lobby}",
+            "User-agent": "Mozilla/5.0 (Linux; Android 8.0.0; BND-L34) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Mobile Safari/537.36",
         }
         data = f"L={self.lobby}"
         try:
@@ -54,6 +55,7 @@ class TenhouClient:
             "Origin": "https://tenhou.net",
             "Content-Type": "text/plain;charset=UTF-8",
             "Referer": f"https://tenhou.net/cs/edit/?{self.lobby}",
+            "User-agent": "Mozilla/5.0 (Linux; Android 8.0.0; BND-L34) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Mobile Safari/537.36",
         }
         data = f"L={self.lobby}&R2={self.game_type}&M={players}&RND=default&WG=1&PW="
         try:

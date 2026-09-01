@@ -56,6 +56,11 @@ class ChatHandlers:
                 "Доступно только в супергруппах. (В настройках группы включите историю чата для новых участников)"
             )
             return
+        count = await update.effective_message.chat.get_member_count()
+        logger.info(f"Размер чата: {count}")
+        if count > 15:
+            await update.effective_message.reply_text("Слишком большой чат.")
+            return
         member = await update.effective_message.chat.get_member(context.bot.id)
         if member.status != "administrator":
             await update.effective_message.reply_text(

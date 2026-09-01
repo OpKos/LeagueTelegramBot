@@ -29,6 +29,18 @@ class GameService:
         assert game
         game.started = status
         self._session_provider.session.commit()
+        return True
+
+    def replace_game_player(self, game_id: int, seat: int, player_id: int):
+        game_player = (
+            self._session_provider.session.query(models.GamePlayer)
+            .where(models.GamePlayer.game_id == game_id)
+            .where(models.GamePlayer.seat == seat)
+            .one()
+        )
+        game_player.p_id = player_id
+        self._session_provider.session.commit()
+        return True
 
     def get_games_status(self):
         started = (
@@ -46,6 +58,15 @@ class GameService:
         game = self._session_provider.session.get(models.Game, game_id)
         ans = []
         for player in game.players():
+            res = "✅ " if self._ready_service.check_player_ready(player.p_id) else "❌ "
+            res += player.irl_name
+            ans.append(res)
+        return "\n".join(ans)
+
+    def get_table_ready_string(self, table_id: int):
+        table = self._session_provider.session.get(models.Table, table_id)
+        ans = []
+        for player in table.get_unfinished_players():
             res = "✅ " if self._ready_service.check_player_ready(player.p_id) else "❌ "
             res += player.irl_name
             ans.append(res)

@@ -18,6 +18,14 @@ class EventService:
             .all()
         )
 
+    def get_started_events(self):
+        return (
+            self._session_provider.session.query(models.Event)
+            .filter(models.Event.started == 1)
+            .order_by(models.Event.event_id)
+            .all()
+        )
+
     def clear_event_players(self, event_id: int):
         self._session_provider.session.query(models.EventPlayer).filter(
             models.EventPlayer.event_id == event_id
