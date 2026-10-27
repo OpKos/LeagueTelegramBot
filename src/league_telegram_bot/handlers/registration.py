@@ -6,8 +6,9 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from .decorators import command_handler
+from .utils import log_command_event
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class RegistrationHandlers:
@@ -24,13 +25,9 @@ class RegistrationHandlers:
         args = context.args
         assert update.effective_message
         assert user
-        logger.info(
-            "User %s (%s) issued /register command with args: %s", user.username, user.id, args
-        )
-
         if not args or len(args) != 1:
-            logger.info(
-                "User %s (%s) used /register with invalid args: %s", user.username, user.id, args
+            log_command_event(
+                update, "register", "rejected", logger=logger, reason="invalid_arguments"
             )
             await update.effective_message.reply_text(self.tr("en", "register_invalid_args"))
             return
@@ -50,11 +47,12 @@ class RegistrationHandlers:
                 await update.effective_message.reply_text(
                     self.tr(lang, "nick_change", old=old_name, new=tenhou_name)
                 )
-            logger.info(
-                "User %s (%s) already registered with Tenhou ID %s.",
-                user.username,
-                user.id,
-                tenhou_name,
+            log_command_event(
+                update,
+                "register",
+                "succeeded",
+                logger=logger,
+                action="nickname_unchanged" if old_name == tenhou_name else "nickname_updated",
             )
             return
 
@@ -67,23 +65,31 @@ class RegistrationHandlers:
             + self.tr("en", "register_success")
             + "\nUse /set_language to change your language"
         )
-        logger.info(
-            "User %s (%s) registered with Tenhou ID %s.", user.username, user.id, tenhou_name
+        log_command_event(
+            update, "register", "succeeded", logger=logger, action="player_registered"
         )
 
     @command_handler("set_language")
     async def set_language(self, update, context) -> None:
-        user_id = update.effective_user.id
+        user = update.effective_user
+        user_id = user.id
         if not context.args or context.args[0] not in ("ru", "en"):
+            log_command_event(
+                update, "set_language", "rejected", logger=logger, reason="invalid_language"
+            )
             await update.message.reply_text("Usage: /set_language ru|en")
             return
 
         lang = context.args[0]
-        p_id = self.players.get_player(telegram_id=user_id).p_id
+        player = self.players.get_player(telegram_id=user_id)
 
-        if not p_id:
+        if not player:
+            log_command_event(
+                update, "set_language", "rejected", logger=logger, reason="not_registered"
+            )
             await update.message.reply_text(self.tr(lang, "not_registered"))
             return
 
-        self.players.set_language(p_id, lang)
+        self.players.set_language(player.p_id, lang)
         await update.message.reply_text(self.tr(lang, "language_set"))
+        log_command_event(update, "set_language", "succeeded", logger=logger, language=lang)

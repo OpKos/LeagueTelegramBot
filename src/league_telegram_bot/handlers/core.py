@@ -20,7 +20,7 @@ from ..services import (
 from .decorators import HandlerSpec
 from .utils import ready_button_reply_markup
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class BaseHandlers:
