@@ -12,8 +12,9 @@ from ..leaderboard.logic import get_leaderboard_data
 from ..seating.image import create_seating_image
 from ..seating.logic import add_table, create_seating
 from .decorators import command_handler
+from .utils import log_command_event
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class AdminHandlers:
@@ -27,12 +28,22 @@ class AdminHandlers:
         assert update.effective_message
 
         if not self.is_admin(user.id):
+            log_command_event(
+                update, "update_game_status", "rejected", logger=logger, reason="admin_only"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
             return
 
         if not context.args or len(context.args) != 2:
+            log_command_event(
+                update,
+                "update_game_status",
+                "rejected",
+                logger=logger,
+                reason="invalid_arguments",
+            )
             await update.effective_message.reply_text(
                 "Usage: /update_game_status <game_id> <status>"
             )
@@ -42,6 +53,9 @@ class AdminHandlers:
         status = int(context.args[1])
 
         if status not in [0, 1]:
+            log_command_event(
+                update, "update_game_status", "rejected", logger=logger, reason="invalid_status"
+            )
             await update.effective_message.reply_text(
                 "Invalid status. Use '1' for started or '0' for not started."
             )
@@ -53,23 +67,25 @@ class AdminHandlers:
             await update.effective_message.reply_text(
                 f"Статус игры с ID {game_id} успешно обновлен на '{status_text}'."
             )
-            logger.info(
-                "Admin %s (%s) updated game status with game ID %s to %s.",
-                user.username,
-                user.id,
-                game_id,
-                status_text,
+            log_command_event(
+                update,
+                "update_game_status",
+                "succeeded",
+                logger=logger,
+                game_id=game_id,
+                status=status_text,
             )
         else:
             await update.effective_message.reply_text(
                 f"Не удалось обновить статус игры с ID {game_id}."
             )
-            logger.error(
-                "Admin %s (%s) failed to update game status with game ID %s to %s.",
-                user.username,
-                user.id,
-                game_id,
-                status,
+            log_command_event(
+                update,
+                "update_game_status",
+                "failed",
+                logger=logger,
+                game_id=game_id,
+                status=status,
             )
 
     @command_handler("replace_player")
@@ -80,21 +96,19 @@ class AdminHandlers:
         assert user
         assert update.effective_message
 
-        logger.info(
-            "User %s (%s) uses command %s with args %s.",
-            user.username,
-            user.id,
-            "replace_player",
-            str(context.args),
-        )
-
         if not self.is_admin(user.id):
+            log_command_event(
+                update, "replace_player", "rejected", logger=logger, reason="admin_only"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
             return
 
         if not context.args or len(context.args) != 3:
+            log_command_event(
+                update, "replace_player", "rejected", logger=logger, reason="invalid_arguments"
+            )
             await update.effective_message.reply_text(
                 "Usage: /replace_player <game_id> <seat> <player_id>"
             )
@@ -106,13 +120,14 @@ class AdminHandlers:
 
         self.games.replace_game_player(game_id=game_id, seat=seat, player_id=player_id)
         await update.effective_message.reply_text("Игрок успешно заменён.")
-        logger.info(
-            "Admin %s (%s) set player in game %s (seat %s) to %s.",
-            user.username,
-            user.id,
-            game_id,
-            seat,
-            player_id,
+        log_command_event(
+            update,
+            "replace_player",
+            "succeeded",
+            logger=logger,
+            game_id=game_id,
+            seat=seat,
+            player_id=player_id,
         )
 
     @command_handler("get_logs")
@@ -123,6 +138,7 @@ class AdminHandlers:
         assert update.effective_message
 
         if not self.is_admin(user.id):
+            log_command_event(update, "get_logs", "rejected", logger=logger, reason="admin_only")
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
@@ -131,13 +147,15 @@ class AdminHandlers:
         try:
             with open("bot.log", "rb") as log_file:
                 await update.effective_message.reply_document(document=log_file)
-            logger.info("Admin %s (%s) requested the log file.", user.username, user.id)
+            log_command_event(update, "get_logs", "succeeded", logger=logger)
         except FileNotFoundError:
             await update.effective_message.reply_text("Файл с логами не найден.")
-            logger.error("Log file not found for admin %s (%s).", user.username, user.id)
+            log_command_event(
+                update, "get_logs", "failed", logger=logger, exc_info=True, reason="file_missing"
+            )
         except Exception as e:
             await update.effective_message.reply_text(f"Произошла ошибка при отправке логов: {e}")
-            logger.error("Error sending log file to admin %s (%s): %s", user.username, user.id, e)
+            log_command_event(update, "get_logs", "failed", logger=logger, exc_info=True)
 
     @command_handler("force_reveal")
     async def force_reveal_command(
@@ -149,6 +167,9 @@ class AdminHandlers:
         assert update.effective_message
 
         if not self.is_admin(user.id):
+            log_command_event(
+                update, "force_reveal", "rejected", logger=logger, reason="admin_only"
+            )
             await update.effective_message.reply_text("Только для админов")
             return
 
@@ -159,6 +180,9 @@ class AdminHandlers:
         try:
             table_id = int(context.args[0])
         except ValueError:
+            log_command_event(
+                update, "force_reveal", "rejected", logger=logger, reason="invalid_table_id"
+            )
             await update.effective_message.reply_text("ID стола должен быть числом")
             return
 
@@ -167,8 +191,10 @@ class AdminHandlers:
             assert table
             await self.notify_table_revealed(context.bot, table)
             await update.effective_message.reply_text(f"Стол {table_id} раскрыт")
+            log_command_event(update, "force_reveal", "succeeded", logger=logger, table_id=table_id)
         else:
             await update.effective_message.reply_text("Ошибка раскрытия стола")
+            log_command_event(update, "force_reveal", "failed", logger=logger, table_id=table_id)
 
     @command_handler("status")
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -177,12 +203,14 @@ class AdminHandlers:
         assert update.effective_message
 
         if not self.is_admin(user.id):
+            log_command_event(update, "status", "rejected", logger=logger, reason="admin_only")
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
             return
 
         await self.send_game_status_message(context)
+        log_command_event(update, "status", "succeeded", logger=logger)
 
     async def reload_session_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -192,13 +220,20 @@ class AdminHandlers:
         assert user
         assert update.effective_message
         if not self.is_admin(user.id):
+            log_command_event(
+                update, "reload_session", "rejected", logger=logger, reason="admin_only"
+            )
             await update.effective_message.reply_text("🔒 Admin only command")
             return
 
         if self.session_manager.reload_session():
             await update.effective_message.reply_text("🔄 Database session reloaded")
+            log_command_event(update, "reload_session", "succeeded", logger=logger)
         else:
             await update.effective_message.reply_text("❌ Failed to reload session")
+            log_command_event(
+                update, "reload_session", "failed", logger=logger, reason="reload_failed"
+            )
 
     @command_handler("get_settings")
     async def get_settings_command(
@@ -209,6 +244,9 @@ class AdminHandlers:
         assert user
         assert update.effective_message
         if not self.is_admin(user.id):
+            log_command_event(
+                update, "get_settings", "rejected", logger=logger, reason="admin_only"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
@@ -216,7 +254,7 @@ class AdminHandlers:
 
         with open(self.settings_path, "rb") as settings_file:
             await update.effective_message.reply_document(document=settings_file)
-        logger.info("Admin %s (%s) requested the settings file.", user.username, user.id)
+        log_command_event(update, "get_settings", "succeeded", logger=logger)
 
     @command_handler("update_event_players")
     async def update_event_players_command(
@@ -228,12 +266,13 @@ class AdminHandlers:
         assert context.job_queue
 
         if not self.is_admin(user.id):
+            log_command_event(
+                update, "update_event_players", "rejected", logger=logger, reason="admin_only"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
             return
-
-        logger.info("Admin %s (%s) updated players in events.", user.username, user.id)
 
         events = self.events.get_signup_events()
 
@@ -241,7 +280,13 @@ class AdminHandlers:
             self.events.clear_event_players(event.event_id)
             res = event_portal_update(self.players, self.events, event)
             await update.effective_message.reply_text(f"Event {event.event_id}\n{res}")
-            logger.info("Updated event %s", event.event_id)
+            log_command_event(
+                update,
+                "update_event_players",
+                "succeeded",
+                logger=logger,
+                event_id=event.event_id,
+            )
 
     @command_handler("create_seating")
     async def create_seating_command(
@@ -250,23 +295,29 @@ class AdminHandlers:
         user = update.effective_user
 
         if not self.is_admin(user.id):
+            log_command_event(
+                update, "create_seating", "rejected", logger=logger, reason="admin_only"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
             return
 
         event = self.events.get_event(int(context.args[0]))
-        logger.info(
-            "Admin %s (%s) created seating for event %s", user.username, user.id, event.event_id
-        )
         create_seating(self.tables, self.games, event)
         await update.effective_message.reply_text("Seating created")
+        log_command_event(
+            update, "create_seating", "succeeded", logger=logger, event_id=event.event_id
+        )
 
     @command_handler("reveal_new_tables")
     async def reveal_new_tables(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
 
         if not self.is_admin(user.id):
+            log_command_event(
+                update, "reveal_new_tables", "rejected", logger=logger, reason="admin_only"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
@@ -275,14 +326,6 @@ class AdminHandlers:
         event = self.events.get_event(int(context.args[0]))
         new_min = int(context.args[1])
         new_max = int(context.args[2])
-        logger.info(
-            "Admin %s (%s) revealed new tables with new_min = %s and new_max = %s",
-            user.username,
-            event.event_id,
-            new_min,
-            new_max,
-        )
-        logger.info("Admin %s (%s) revealed new tables", user.username, event.event_id)
         event.global_maximum = new_max
         nt = self.reveal.try_reveal(event.event_id, cache=True)
         while nt:
@@ -295,6 +338,15 @@ class AdminHandlers:
         await update.effective_message.reply_text(
             f"Event {event.event_id} cached tables\n{' '.join(t.name for t in cached)}"
         )
+        log_command_event(
+            update,
+            "reveal_new_tables",
+            "succeeded",
+            logger=logger,
+            event_id=event.event_id,
+            minimum=new_min,
+            maximum=new_max,
+        )
 
     @command_handler("seating_image")
     async def seating_image_command(
@@ -303,18 +355,15 @@ class AdminHandlers:
         user = update.effective_user
 
         if not self.is_admin(user.id):
+            log_command_event(
+                update, "seating_image", "rejected", logger=logger, reason="admin_only"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
             return
 
         events = self.events.get_signup_events()
-        logger.info(
-            "Admin %s (%s) requested image for deadline group %s",
-            user.username,
-            user.id,
-            context.args[0],
-        )
         create_seating_image(
             events=events,
             deadline_group=int(context.args[0]),
@@ -323,6 +372,13 @@ class AdminHandlers:
         )
         with open("seating.png", "rb") as image_file:
             await update.effective_message.reply_document(document=image_file)
+        log_command_event(
+            update,
+            "seating_image",
+            "succeeded",
+            logger=logger,
+            deadline_group=context.args[0],
+        )
 
     @command_handler("split_leaderboard")
     async def split_leaderboard_command(
@@ -331,6 +387,9 @@ class AdminHandlers:
         user = update.effective_user
 
         if not self.is_admin(user.id):
+            log_command_event(
+                update, "split_leaderboard", "rejected", logger=logger, reason="admin_only"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
@@ -354,12 +413,16 @@ class AdminHandlers:
             player_ids.append(player[3])
         self.players.edit_event_players_leaderboard_group(event_id=event_id, player_ids=player_ids)
         await update.effective_message.reply_text("Успешно")
+        log_command_event(
+            update, "split_leaderboard", "succeeded", logger=logger, event_id=event_id
+        )
 
     @command_handler("add_table")
     async def add_table_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
 
         if not self.is_admin(user.id):
+            log_command_event(update, "add_table", "rejected", logger=logger, reason="admin_only")
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
@@ -392,12 +455,21 @@ class AdminHandlers:
             table_name=table_name,
         )
         await update.effective_message.reply_text("Успешно")
+        log_command_event(
+            update,
+            "add_table",
+            "succeeded",
+            logger=logger,
+            event_id=event_id,
+            table_name=table_name,
+        )
 
     @command_handler("table_chat")
     async def table_chat_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
 
         if not self.is_admin(user.id):
+            log_command_event(update, "table_chat", "rejected", logger=logger, reason="admin_only")
             await update.effective_message.reply_text(
                 "Эта команда доступна только администраторам."
             )
@@ -410,12 +482,23 @@ class AdminHandlers:
         table_name = context.args[0]
         table = self.tables.get_table(table_name=table_name)
         if not table:
+            log_command_event(
+                update, "table_chat", "rejected", logger=logger, reason="table_not_found"
+            )
             await update.effective_message.reply_text("Стол не найден.")
             return
         try:
             link = await context.bot.create_chat_invite_link(chat_id=table.chat_id)
-        except Exception as e:
+        except Exception:
             await update.effective_message.reply_text("Ошибка генерации ссылки")
-            logger.error(e)
+            log_command_event(
+                update,
+                "table_chat",
+                "failed",
+                logger=logger,
+                exc_info=True,
+                table_id=table.table_id,
+            )
             return
         await update.effective_message.reply_text(link.invite_link)
+        log_command_event(update, "table_chat", "succeeded", logger=logger, table_id=table.table_id)

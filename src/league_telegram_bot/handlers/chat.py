@@ -6,8 +6,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from .decorators import callback_query_handler, command_handler
+from .utils import log_command_event
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class ChatHandlers:
@@ -52,38 +53,52 @@ class ChatHandlers:
     @command_handler("set_chat")
     async def set_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if update.effective_message.chat.type != "supergroup":
+            log_command_event(
+                update, "set_chat", "rejected", logger=logger, reason="supergroup_required"
+            )
             await update.effective_message.reply_text(
                 "Доступно только в супергруппах. (В настройках группы включите историю чата для новых участников)"
             )
             return
         count = await update.effective_message.chat.get_member_count()
-        logger.info(f"Размер чата: {count}")
         if count > 15:
+            log_command_event(
+                update,
+                "set_chat",
+                "rejected",
+                logger=logger,
+                reason="chat_too_large",
+                member_count=count,
+            )
             await update.effective_message.reply_text("Слишком большой чат.")
             return
         member = await update.effective_message.chat.get_member(context.bot.id)
         if member.status != "administrator":
+            log_command_event(update, "set_chat", "rejected", logger=logger, reason="bot_not_admin")
             await update.effective_message.reply_text(
                 "Сначала назначьте боту права администратора."
             )
             return
         user = update.effective_user
-        logger.info(
-            "Пользователь %s (%s) вызвал /set_chat в чате %s",
-            user.username,
-            user.id,
-            update.effective_message.chat.id,
-        )
         t = self.tables.get_table(chat_id=update.effective_message.chat.id)
         if t:
+            log_command_event(
+                update, "set_chat", "rejected", logger=logger, reason="table_already_assigned"
+            )
             await update.effective_message.reply_text(f"У этого чата уже есть стол {t.name}.")
             return
         player = self.players.get_player(telegram_id=user.id)
         if not player:
+            log_command_event(
+                update, "set_chat", "rejected", logger=logger, reason="not_registered"
+            )
             await update.effective_message.reply_text("Вы не зарегистрированы.")
             return
         table_names = [table.name for table in player.visible_tables() if table.chat_id == 0]
         if not table_names:
+            log_command_event(
+                update, "set_chat", "rejected", logger=logger, reason="no_available_tables"
+            )
             await update.effective_message.reply_text("У вас нет нераскрытых столов.")
             return
         keyboard = [
@@ -91,3 +106,10 @@ class ChatHandlers:
         ] + [[InlineKeyboardButton("Отмена", callback_data="TCCancel")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text("Выберите стол", reply_markup=reply_markup)
+        log_command_event(
+            update,
+            "set_chat",
+            "succeeded",
+            logger=logger,
+            available_tables=len(table_names),
+        )

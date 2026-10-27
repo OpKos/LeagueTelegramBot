@@ -9,31 +9,36 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from .decorators import callback_query_handler, command_handler
-from .utils import table_time_string
+from .utils import log_command_event, table_time_string
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class TableHandlers:
     @command_handler("start_table")
     async def start_table_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user = update.effective_user
-
-        logger.info(f"Пользователь {user.username} ({user.id}) вызвал /start_table.")
-
         table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
+            log_command_event(
+                update, "start_table", "rejected", logger=logger, reason="chat_has_no_table"
+            )
             await update.effective_message.reply_text(
                 "У чата не указан стол, используйте /set_chat"
             )
             return
 
         if not table.unfinished_games():
+            log_command_event(
+                update, "start_table", "rejected", logger=logger, reason="no_unfinished_games"
+            )
             await update.effective_message.reply_text(text="Все игры за столом сыграны")
             return
 
         msg = self.games.get_table_ready_string(table_id=table.table_id)
         await update.message.reply_text(msg, reply_markup=self._ready_button_reply_markup)
+        log_command_event(
+            update, "start_table", "succeeded", logger=logger, table_id=table.table_id
+        )
 
     @callback_query_handler(pattern=r"^RB")
     async def ready_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -102,21 +107,30 @@ class TableHandlers:
     async def next_table_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         if update.effective_message.chat.type != "private":
+            log_command_event(
+                update, "next_table", "rejected", logger=logger, reason="private_chat_required"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только в личных сообщениях с ботом."
             )
             return
-        logger.info("User %s (%s) issued /next_table command.", user.username, user.id)
         player = self.players.get_player(telegram_id=user.id)
         if not player:
+            log_command_event(
+                update, "next_table", "rejected", logger=logger, reason="not_registered"
+            )
             await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
             return
         lang = player.language
         if not self.players.set_target_tables(player.p_id, goal=1):
+            log_command_event(
+                update, "next_table", "rejected", logger=logger, reason="target_update_failed"
+            )
             await update.effective_message.reply_text(self.tr(lang, "next_table_fail"))
             return
 
         await update.effective_message.reply_text(self.tr(lang, "next_table_success"))
+        log_command_event(update, "next_table", "succeeded", logger=logger)
 
         for ep in player.player_events:
             nt = self.reveal.try_reveal(ep.event_id)
@@ -127,23 +141,32 @@ class TableHandlers:
     async def all_tables_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         if update.effective_message.chat.type != "private":
+            log_command_event(
+                update, "all_tables", "rejected", logger=logger, reason="private_chat_required"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только в личных сообщениях с ботом."
             )
             return
-        logger.info("User %s (%s) issued /all_tables command.", user.username, user.id)
         player = self.players.get_player(telegram_id=user.id)
         if not player:
+            log_command_event(
+                update, "all_tables", "rejected", logger=logger, reason="not_registered"
+            )
             await update.effective_message.reply_text("Вы не зарегистрированы в системе.")
             return
         player.full_ready = 1
         self.session_manager.session.commit()
         lang = player.language
         if not self.players.set_target_tables(player.p_id, full=True):
+            log_command_event(
+                update, "all_tables", "rejected", logger=logger, reason="target_update_failed"
+            )
             await update.effective_message.reply_text(self.tr(lang, "all_tables_fail"))
             return
 
         await update.effective_message.reply_text(self.tr(lang, "all_tables_success"))
+        log_command_event(update, "all_tables", "succeeded", logger=logger)
 
         for ep in player.player_events:
             if ep.event.started == 0:
@@ -160,12 +183,18 @@ class TableHandlers:
 
         table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
+            log_command_event(
+                update, "set_time", "rejected", logger=logger, reason="chat_has_no_table"
+            )
             await update.effective_message.reply_text(
                 "У чата не указан стол, используйте /set_chat"
             )
             return
 
         if not context.args or len(context.args) % 3 != 0:
+            log_command_event(
+                update, "set_time", "rejected", logger=logger, reason="invalid_arguments"
+            )
             await update.effective_message.reply_text(
                 "Использование: /set_time <день> <время> <число игр>\n"
                 "День вводить без месяца, только само число. Можно вводить день недели двумя буквами.\n"
@@ -178,7 +207,9 @@ class TableHandlers:
         games_left = len(table.unfinished_games())
         if not games_left:
             await update.effective_message.reply_text(f"Нет неначатых игр за столом {table.name}.")
-            logger.info("No unstarted games at table %s.", table.name)
+            log_command_event(
+                update, "set_time", "rejected", logger=logger, reason="no_unstarted_games"
+            )
             return
 
         player = self.players.get_player(telegram_id=user.id)
@@ -186,10 +217,8 @@ class TableHandlers:
             await update.effective_message.reply_text(
                 "Указывать время можно только за своим столом."
             )
-            logger.info(
-                "%s attempted using set_time with args %s. Not found at table",
-                user.name,
-                [context.args],
+            log_command_event(
+                update, "set_time", "rejected", logger=logger, reason="not_table_player"
             )
             return
 
@@ -210,12 +239,16 @@ class TableHandlers:
                 await update.effective_message.reply_text(
                     "Количество игр должно быть положительным."
                 )
-                logger.info("Not positive games at table %s: %s.", table.name, games)
+                log_command_event(
+                    update, "set_time", "rejected", logger=logger, reason="nonpositive_game_count"
+                )
                 return
             games_left -= games
             if games_left < 0:
                 await update.effective_message.reply_text("Указано больше игр, чем осталось.")
-                logger.info("Too many games at table %s.", table.name)
+                log_command_event(
+                    update, "set_time", "rejected", logger=logger, reason="too_many_games"
+                )
                 return
 
             time_digits = "".join(ch for ch in time if ch.isdigit())
@@ -239,7 +272,9 @@ class TableHandlers:
                 day = day.lower()
                 if day not in weekdays:
                     await update.effective_message.reply_text(f"День недели не найден {day}.")
-                    logger.info("Weekday not found %s.", day)
+                    log_command_event(
+                        update, "set_time", "rejected", logger=logger, reason="weekday_not_found"
+                    )
                     return
                 weekday = weekdays.index(day)
                 current_weekday = now.weekday()
@@ -256,15 +291,14 @@ class TableHandlers:
                 success_times.append(prospective_start.strftime("%d.%m %H:%M") + f" (игр: {games})")
                 game_lengths.append(games)
             except ValueError:
-                logger.info(
-                    "%s attempted using set_time with args %s. Invalid time: %s.%s.%s %s:%s",
-                    user.name,
-                    [context.args],
-                    year,
-                    month,
-                    day,
-                    hour,
-                    minute,
+                log_command_event(
+                    update,
+                    "set_time",
+                    "rejected",
+                    logger=logger,
+                    reason="invalid_time",
+                    date=f"{year}-{month}-{day}",
+                    time=f"{hour}:{minute}",
                 )
                 await update.effective_message.reply_text(
                     f"Время не распознано {year}.{month}.{day} {hour}:{minute}"
@@ -281,6 +315,7 @@ class TableHandlers:
         await update.effective_message.reply_text(
             f"Время установлено: \n{'\n'.join(success_times)}"
         )
+        log_command_event(update, "set_time", "succeeded", logger=logger, table_id=table.table_id)
         for time in success_times:
             await update.effective_message.chat.send_poll(
                 question=time,
@@ -295,6 +330,9 @@ class TableHandlers:
 
         table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
+            log_command_event(
+                update, "remove_time", "rejected", logger=logger, reason="chat_has_no_table"
+            )
             await update.effective_message.reply_text(
                 "У чата не указан стол, используйте /set_chat"
             )
@@ -303,10 +341,8 @@ class TableHandlers:
         player = self.players.get_player(telegram_id=user.id)
         if player not in table.players() and not self.is_admin(user.id):
             await update.effective_message.reply_text("Удалять время можно только за своим столом.")
-            logger.info(
-                "%s attempted using remove_time with args %s. Not found at table",
-                user.name,
-                [context.args],
+            log_command_event(
+                update, "remove_time", "rejected", logger=logger, reason="not_table_player"
             )
             return
         timezone = pytz.timezone("Europe/Moscow")
@@ -316,7 +352,9 @@ class TableHandlers:
         self.tables.set_table_time(
             table_id=table.table_id, timestamps=[], reminder_cutoff=cutoff, lengths=[]
         )
-        logger.info("%s used remove_time for table %s.", user.name, [table.table_id])
+        log_command_event(
+            update, "remove_time", "succeeded", logger=logger, table_id=table.table_id
+        )
         await update.effective_message.reply_text("Время удалено.")
 
     @command_handler("timetable")
@@ -325,8 +363,10 @@ class TableHandlers:
         assert user
         assert update.effective_message
 
-        logger.info("User %s (%s) issued /timetable command.", user.username, user.id)
         if update.effective_message.chat.type != "private":
+            log_command_event(
+                update, "timetable", "rejected", logger=logger, reason="private_chat_required"
+            )
             await update.effective_message.reply_text(
                 "Эта команда доступна только в личных сообщениях с ботом."
             )
@@ -340,6 +380,9 @@ class TableHandlers:
         if ans == "":
             ans = "Игр нет"
         await update.effective_message.reply_text(ans, parse_mode=ParseMode.HTML)
+        log_command_event(
+            update, "timetable", "succeeded", logger=logger, table_count=len(known_times)
+        )
 
     @command_handler("judge_call")
     async def judge_call_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -347,6 +390,9 @@ class TableHandlers:
 
         table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
+            log_command_event(
+                update, "judge_call", "rejected", logger=logger, reason="chat_has_no_table"
+            )
             await update.effective_message.reply_text(
                 "У чата не указан стол, используйте /set_chat"
             )
@@ -354,14 +400,24 @@ class TableHandlers:
 
         player = self.players.get_player(telegram_id=user.id)
         if not player:
+            log_command_event(
+                update, "judge_call", "rejected", logger=logger, reason="not_registered"
+            )
             await update.effective_message.reply_text("Вы не зарегистрированы в системе")
             return
 
         try:
             link = await context.bot.create_chat_invite_link(chat_id=table.chat_id)
-        except Exception as e:
+        except Exception:
             await update.effective_message.reply_text("Ошибка генерации ссылки")
-            logger.error(e)
+            log_command_event(
+                update,
+                "judge_call",
+                "failed",
+                logger=logger,
+                exc_info=True,
+                table_id=table.table_id,
+            )
             return
         admin_list = self.players.get_admins()
         msg = [f"{player.irl_name} вызывает админа за стол {table.name}\n{link.invite_link}\n"]
@@ -370,3 +426,4 @@ class TableHandlers:
         msg = "".join(msg)
         await context.bot.send_message(chat_id=self.admin_chat, text=msg)
         await update.effective_message.reply_text("Вызвал админа за стол")
+        log_command_event(update, "judge_call", "succeeded", logger=logger, table_id=table.table_id)
