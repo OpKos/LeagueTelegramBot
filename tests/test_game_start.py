@@ -88,3 +88,41 @@ def test_game_start_member_not_found_unreadies_missing_players_and_keeps_ready_u
     chat.send_message.assert_awaited_once()
     assert "tenhou3" in chat.send_message.await_args.kwargs["text"]
     context.bot.send_message.assert_not_awaited()
+
+
+def test_game_start_failure_notifies_table_without_changing_game_or_ready_state() -> None:
+    handler, game, table, _players, update, context, chat = _game_and_update()
+    handler.tenhou_client.start_game.return_value = ("LOBBY FULL", [], False)
+    handler.tr = lambda _lang, key, **kwargs: f"start_game_failed: {kwargs['reason']}"
+
+    asyncio.run(handler.game_start(game, table, update, context))
+
+    handler.games.set_game_status.assert_not_called()
+    handler.ready.set_player_unready.assert_not_called()
+    chat.send_message.assert_awaited_once_with(text="start_game_failed: LOBBY FULL")
+    context.bot.send_message.assert_not_awaited()
+    update.callback_query.edit_message_text.assert_not_awaited()
+
+
+def test_table_check_starts_first_ready_game_only() -> None:
+    handler, game, _table, _players, update, context, _chat = _game_and_update()
+    table = SimpleNamespace(table_id=4)
+    handler.games.get_first_ready_game.return_value = game
+    handler.game_start = AsyncMock()
+
+    asyncio.run(handler.table_check_and_start_game(table, update, context))
+
+    handler.games.get_first_ready_game.assert_called_once_with(table.table_id)
+    handler.game_start.assert_awaited_once_with(game, table, update, context)
+
+
+def test_table_check_does_not_start_when_no_game_is_ready() -> None:
+    handler, _game, _table, _players, update, context, _chat = _game_and_update()
+    table = SimpleNamespace(table_id=4)
+    handler.games.get_first_ready_game.return_value = None
+    handler.game_start = AsyncMock()
+
+    asyncio.run(handler.table_check_and_start_game(table, update, context))
+
+    handler.games.get_first_ready_game.assert_called_once_with(table.table_id)
+    handler.game_start.assert_not_awaited()
