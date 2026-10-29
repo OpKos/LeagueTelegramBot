@@ -62,6 +62,33 @@ class TableService:
         self._session_provider.session.commit()
         return True
 
+    def add_table_time(
+        self, table_id: int, timestamp: int, games: int, reminder_cutoff: int
+    ) -> bool:
+        table = self._session_provider.session.get(models.Table, table_id)
+        if table is None:
+            return False
+        self._session_provider.session.add(
+            models.TableTime(
+                table_id=table_id,
+                time=timestamp,
+                need_reminder=int(timestamp >= reminder_cutoff),
+                games=games,
+            )
+        )
+        self._session_provider.session.commit()
+        return True
+
+    def clear_table_times(self, table_id: int) -> bool:
+        table = self._session_provider.session.get(models.Table, table_id)
+        if table is None:
+            return False
+        self._session_provider.session.execute(
+            delete(models.TableTime).where(models.TableTime.table_id == table_id)
+        )
+        self._session_provider.session.commit()
+        return True
+
     def get_all_tables(self):
         return self._session_provider.session.query(models.Table).all()
 

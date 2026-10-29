@@ -2,16 +2,109 @@ from __future__ import annotations
 
 import datetime
 import logging
+from dataclasses import dataclass
 
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from .. import models
 from ..time_utils import datetime_to_timestamp, now_in_timezone
 from .decorators import callback_query_handler, command_handler
 from .utils import log_command_event, table_time_string
 
 logger = logging.getLogger(__name__)
+
+WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
+
+
+@dataclass(frozen=True)
+class ParsedTableTime:
+    timestamp: int
+    games: int
+    display: str
+
+
+class TableTimeInputError(ValueError):
+    def __init__(self, reason: str, message: str):
+        super().__init__(message)
+        self.reason = reason
+
+
+def parse_table_time(
+    day_arg: str,
+    time_arg: str,
+    games_arg: str,
+    now: datetime.datetime,
+    timezone: str,
+) -> ParsedTableTime:
+    try:
+        games = int(games_arg)
+    except ValueError as error:
+        raise TableTimeInputError(
+            "invalid_game_count", "Количество игр должно быть положительным."
+        ) from error
+    if games <= 0:
+        raise TableTimeInputError(
+            "nonpositive_game_count", "Количество игр должно быть положительным."
+        )
+
+    time_digits = "".join(ch for ch in time_arg if ch.isdigit())
+    if not time_digits:
+        raise TableTimeInputError("invalid_time", f"Время не распознано {time_arg}")
+    if len(time_digits) < 3:
+        hour = int(time_digits)
+        minute = 0
+    else:
+        hour = int(time_digits[:-2])
+        minute = int(time_digits[-2:])
+
+    if day_arg.isnumeric():
+        day = int(day_arg)
+        month = now.month
+        year = now.year
+        if day < now.day:
+            month += 1
+            if month > 12:
+                month = 1
+                year += 1
+    else:
+        weekday_name = day_arg.lower()
+        if weekday_name not in WEEKDAYS:
+            raise TableTimeInputError("weekday_not_found", f"День недели не найден {weekday_name}.")
+        weekday = WEEKDAYS.index(weekday_name)
+        shift = (weekday - now.weekday()) % 7
+        prospective_date = now + datetime.timedelta(days=shift)
+        day = prospective_date.day
+        month = prospective_date.month
+        year = prospective_date.year
+
+    try:
+        prospective_start = datetime.datetime(
+            year=year, month=month, day=day, hour=hour, minute=minute
+        )
+        timestamp = datetime_to_timestamp(prospective_start, timezone)
+    except ValueError as error:
+        raise TableTimeInputError(
+            "invalid_time",
+            f"Время не распознано {year}.{month}.{day} {hour}:{minute}",
+        ) from error
+
+    return ParsedTableTime(
+        timestamp=timestamp,
+        games=games,
+        display=prospective_start.strftime("%d.%m %H:%M") + f" (игр: {games})",
+    )
+
+
+def remaining_unassigned_games(table: models.Table) -> int:
+    scheduled_games = sum(table_time.games for table_time in table.table_times)
+    return len(table.unfinished_games()) - scheduled_games
+
+
+def validate_scheduled_game_count(table: models.Table, games: int) -> None:
+    if games > remaining_unassigned_games(table):
+        raise TableTimeInputError("too_many_games", "Указано больше игр, чем осталось.")
 
 
 class TableHandlers:
@@ -44,69 +137,173 @@ class TableHandlers:
     async def ready_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         chat = query.message.chat
-        chat_id = chat.id
         data = query.data[2:]
         await query.answer()
+        log_command_event(update, "ready_button", "started", logger=logger, action=data)
         if data == "Cancel":
             await query.edit_message_text(text="Отменено")
+            log_command_event(update, "ready_button", "rejected", logger=logger, reason="cancelled")
             return
-        status = data
         user = update.effective_user
+        if user is None:
+            log_command_event(
+                update, "ready_button", "rejected", logger=logger, reason="user_not_found"
+            )
+            return
         player = self.players.get_player(telegram_id=user.id)
-        table = self.tables.get_table(chat_id=chat_id)
+        if player is None:
+            log_command_event(
+                update, "ready_button", "rejected", logger=logger, reason="not_registered"
+            )
+            return
+        table = self.tables.get_table(chat_id=chat.id)
+        if table is None:
+            log_command_event(
+                update, "ready_button", "rejected", logger=logger, reason="chat_has_no_table"
+            )
+            return
         if not table.unfinished_games():
             await query.edit_message_text(text="Все игры за столом сыграны")
+            log_command_event(
+                update, "ready_button", "rejected", logger=logger, reason="no_unfinished_games"
+            )
             return
-        if status == "Ready":
-            logger.info("User %s pressed ready button", user.username)
+        if data == "Ready":
             self.ready.set_player_ready(player.p_id)
-        else:
-            logger.info("User %s pressed unready button", user.username)
+        elif data == "Unready":
             self.ready.set_player_unready(player.p_id)
+        else:
+            log_command_event(
+                update, "ready_button", "rejected", logger=logger, reason="invalid_action"
+            )
+            return
         msg = self.games.get_table_ready_string(table_id=table.table_id)
         await query.edit_message_text(text=msg, reply_markup=self._ready_button_reply_markup)
-        ready_games = []
-        for game in table.unfinished_games():
-            if self.games.check_game_ready(game_id=game.game_id):
-                ready_games.append(game)
-        if ready_games:
-            game = ready_games[0]
-            player_nicks = [p.tenhou_name for p in game.players()]
+        log_command_event(
+            update,
+            "ready_button",
+            "succeeded",
+            logger=logger,
+            action=data,
+            player_id=player.p_id,
+            table_id=table.table_id,
+        )
+        await self.table_check_and_start_game(table, update, context)
+
+    async def table_check_and_start_game(
+        self, table: models.Table, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        game = self.games.get_first_ready_game(table.table_id)
+        if game is not None:
+            await self.game_start(game, table, update, context)
+
+    async def game_start(
+        self,
+        game: models.Game,
+        table: models.Table,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ) -> None:
+        log_command_event(update, "game_start", "started", logger=logger, game_id=game.game_id)
+        player_nicks = [player.tenhou_name for player in game.players()]
+        try:
             result, missed_players, success = self.tenhou_client.start_game(player_nicks)
-            logger.info(
-                "Запуск игры за столом %s: %s, %s, %s",
-                game.table.name,
-                result,
-                missed_players,
-                success,
+        except Exception:
+            log_command_event(
+                update,
+                "game_start",
+                "failed",
+                logger=logger,
+                exc_info=True,
+                game_id=game.game_id,
+                reason="tenhou_exception",
             )
-            if success:
+            raise
+
+        if success:
+            try:
                 self.games.set_game_status(game.game_id, 1)
                 seat_winds_names = ["東", "南", "西", "北"]
                 text = f"Игра за столом {game.table.name} запущена:"
-                for i, p in enumerate(game.players()):
-                    text += f"\n{seat_winds_names[i]} {p.irl_name} ({p.tenhou_name})"
-                    self.ready.set_player_unready(p.p_id)
+                for index, player in enumerate(game.players()):
+                    text += f"\n{seat_winds_names[index]} {player.irl_name} ({player.tenhou_name})"
+                    self.ready.set_player_unready(player.p_id)
                 await context.bot.send_message(chat_id=self.chat, text=text)
-                logger.info("Игра за столом %s успешно запущена", game.table.name)
-                await query.edit_message_text(text="Приятной игры!")
-            elif result == "MEMBER NOT FOUND":
+                await update.callback_query.edit_message_text(text="Приятной игры!")
+            except Exception:
+                log_command_event(
+                    update,
+                    "game_start",
+                    "failed",
+                    logger=logger,
+                    exc_info=True,
+                    game_id=game.game_id,
+                    reason="post_start_action_failed",
+                )
+                raise
+            log_command_event(
+                update,
+                "game_start",
+                "succeeded",
+                logger=logger,
+                game_id=game.game_id,
+                result=result,
+                missed_players=missed_players,
+            )
+            return
+
+        try:
+            if result == "MEMBER NOT FOUND":
                 for nick in missed_players:
-                    p = self.players.get_player(tenhou_name=nick)
-                    self.ready.set_player_unready(p.p_id)
+                    player = self.players.get_player(tenhou_name=nick)
+                    if player is None:
+                        log_command_event(
+                            update,
+                            "game_start",
+                            "failed",
+                            logger=logger,
+                            game_id=game.game_id,
+                            reason="missed_player_not_found",
+                            tenhou_name=nick,
+                        )
+                        continue
+                    self.ready.set_player_unready(player.p_id)
                 msg = self.games.get_table_ready_string(table_id=table.table_id)
-                await query.edit_message_text(
+                await update.callback_query.edit_message_text(
                     text=msg, reply_markup=self._ready_button_reply_markup
                 )
-                await query.message.chat.send_message(
+                await update.callback_query.message.chat.send_message(
                     text=f"Игроки не в лобби: {', '.join(missed_players)}, статус готовности обновлён."
                 )
             else:
-                await query.message.chat.send_message(text=f"Не удалось запустить игру: {result}")
+                await update.callback_query.message.chat.send_message(
+                    text=f"Не удалось запустить игру: {result}"
+                )
+        except Exception:
+            log_command_event(
+                update,
+                "game_start",
+                "failed",
+                logger=logger,
+                exc_info=True,
+                game_id=game.game_id,
+                reason="failure_notification_failed",
+            )
+            raise
+        log_command_event(
+            update,
+            "game_start",
+            "failed",
+            logger=logger,
+            game_id=game.game_id,
+            reason=result,
+            missed_players=missed_players,
+            success=success,
+        )
 
     @command_handler("set_time")
     async def set_time_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Обновляет статус игры (только для администраторов)."""
+        """Add one proposed game time for this table."""
         user = update.effective_user
 
         table = self.tables.get_table(chat_id=update.effective_message.chat_id)
@@ -119,7 +316,7 @@ class TableHandlers:
             )
             return
 
-        if not context.args or len(context.args) % 3 != 0:
+        if not context.args or len(context.args) != 3:
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="invalid_arguments"
             )
@@ -127,21 +324,25 @@ class TableHandlers:
                 "Использование: /set_time <день> <время> <число игр>\n"
                 "День вводить без месяца, только само число. Можно вводить день недели двумя буквами.\n"
                 "Время можно указывать как с минутами, так и без. При указании с минутами, разделитель не обязателен.\n"
-                "Пример: 19:30 20 числа, 4 ханчана - /set_time 20 1930 4\n"
-                "17:00 вторник 2 ханчана и 19:00 среда 2 ханчана - /set_time вт 17 2 ср 19 2"
+                "Пример: 17:00 вторник, 2 ханчана - /set_time вт 17 2\n"
+                "Пример: 17:15 25 числа, 4 ханчана - /set_time 25 1715 4"
             )
             return
 
-        games_left = len(table.unfinished_games())
-        if not games_left:
+        if not table.unfinished_games():
             await update.effective_message.reply_text(f"Нет неначатых игр за столом {table.name}.")
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="no_unstarted_games"
             )
             return
 
+        if user is None:
+            log_command_event(
+                update, "set_time", "rejected", logger=logger, reason="user_not_found"
+            )
+            return
         player = self.players.get_player(telegram_id=user.id)
-        if player not in table.players():
+        if player is None or player not in table.players():
             await update.effective_message.reply_text(
                 "Указывать время можно только за своим столом."
             )
@@ -150,106 +351,40 @@ class TableHandlers:
             )
             return
 
-        weekdays = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
-
-        days = context.args[::3]
-        times = context.args[1::3]
-        lengths = context.args[2::3]
-        start_times = []
-        game_lengths = []
-        success_times = []
-
         now = now_in_timezone(self.timezone)
-        for day, time, games in zip(days, times, lengths, strict=False):
-            games = int(games)
-            if games <= 0:
-                await update.effective_message.reply_text(
-                    "Количество игр должно быть положительным."
-                )
-                log_command_event(
-                    update, "set_time", "rejected", logger=logger, reason="nonpositive_game_count"
-                )
-                return
-            games_left -= games
-            if games_left < 0:
-                await update.effective_message.reply_text("Указано больше игр, чем осталось.")
-                log_command_event(
-                    update, "set_time", "rejected", logger=logger, reason="too_many_games"
-                )
-                return
+        try:
+            scheduled_time = parse_table_time(
+                context.args[0],
+                context.args[1],
+                context.args[2],
+                now,
+                self.timezone,
+            )
+            validate_scheduled_game_count(table, scheduled_time.games)
+        except TableTimeInputError as error:
+            await update.effective_message.reply_text(str(error))
+            log_command_event(update, "set_time", "rejected", logger=logger, reason=error.reason)
+            return
 
-            time_digits = "".join(ch for ch in time if ch.isdigit())
-            if len(time_digits) < 3:
-                hour = int(time_digits)
-                minute = 0
-            else:
-                hour = int(time_digits[:-2])
-                minute = int(time_digits[-2:])
-
-            if day.isnumeric():
-                day = int(day)
-                month = now.month
-                year = now.year
-                if day < now.day:
-                    month += 1
-                if month > 12:
-                    month -= 12
-                    year += 1
-            else:
-                day = day.lower()
-                if day not in weekdays:
-                    await update.effective_message.reply_text(f"День недели не найден {day}.")
-                    log_command_event(
-                        update, "set_time", "rejected", logger=logger, reason="weekday_not_found"
-                    )
-                    return
-                weekday = weekdays.index(day)
-                current_weekday = now.weekday()
-                shift = (weekday - current_weekday) % 7
-                prospective_date = now + datetime.timedelta(days=shift)
-                day = prospective_date.day
-                month = prospective_date.month
-                year = prospective_date.year
-            try:
-                prospective_start = datetime.datetime(
-                    year=year, month=month, day=day, hour=hour, minute=minute
-                )
-                start_times.append(datetime_to_timestamp(prospective_start, self.timezone))
-                success_times.append(prospective_start.strftime("%d.%m %H:%M") + f" (игр: {games})")
-                game_lengths.append(games)
-            except ValueError:
-                log_command_event(
-                    update,
-                    "set_time",
-                    "rejected",
-                    logger=logger,
-                    reason="invalid_time",
-                    date=f"{year}-{month}-{day}",
-                    time=f"{hour}:{minute}",
-                )
-                await update.effective_message.reply_text(
-                    f"Время не распознано {year}.{month}.{day} {hour}:{minute}"
-                )
-                return
         cutoff = now + datetime.timedelta(hours=12)
         cutoff = int(cutoff.timestamp())
-        self.tables.set_table_time(
+        if not self.tables.add_table_time(
             table_id=table.table_id,
-            timestamps=start_times,
+            timestamp=scheduled_time.timestamp,
+            games=scheduled_time.games,
             reminder_cutoff=cutoff,
-            lengths=game_lengths,
-        )
-        await update.effective_message.reply_text(
-            f"Время установлено: \n{'\n'.join(success_times)}"
-        )
+        ):
+            log_command_event(update, "set_time", "failed", logger=logger, reason="table_not_found")
+            await update.effective_message.reply_text("Не удалось сохранить время.")
+            return
+        await update.effective_message.reply_text(f"Время установлено: \n{scheduled_time.display}")
         log_command_event(update, "set_time", "succeeded", logger=logger, table_id=table.table_id)
-        for time in success_times:
-            await update.effective_message.chat.send_poll(
-                question=time,
-                options=["Согласен играть в это время"],
-                allows_revoting=False,
-                is_anonymous=False,
-            )
+        await update.effective_message.chat.send_poll(
+            question=scheduled_time.display,
+            options=["Согласен играть в это время"],
+            allows_revoting=False,
+            is_anonymous=False,
+        )
 
     @command_handler("remove_time")
     async def remove_time_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -272,12 +407,12 @@ class TableHandlers:
                 update, "remove_time", "rejected", logger=logger, reason="not_table_player"
             )
             return
-        now = now_in_timezone(self.timezone)
-        cutoff = now + datetime.timedelta(hours=12)
-        cutoff = int(cutoff.timestamp())
-        self.tables.set_table_time(
-            table_id=table.table_id, timestamps=[], reminder_cutoff=cutoff, lengths=[]
-        )
+        if not self.tables.clear_table_times(table.table_id):
+            log_command_event(
+                update, "remove_time", "failed", logger=logger, reason="table_not_found"
+            )
+            await update.effective_message.reply_text("Не удалось удалить время.")
+            return
         log_command_event(
             update, "remove_time", "succeeded", logger=logger, table_id=table.table_id
         )

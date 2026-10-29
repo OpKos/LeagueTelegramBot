@@ -106,6 +106,32 @@ def test_ready_and_game_status(services) -> None:
     assert games.check_game_ready(game.game_id) is False
 
 
+def test_get_first_ready_game_returns_first_ready_unfinished_game(services) -> None:
+    manager, players, tables, _events, ready, games = services
+    event = models.Event(name="Event", started=1)
+    manager.session.add(event)
+    manager.session.commit()
+
+    created = _create_players(players, count=8)
+    table = tables.create_table_with_players(event.event_id, "T1", created)
+    manager.session.commit()
+    games.create_game_with_players(table.table_id, created[:4])
+    games.create_game_with_players(table.table_id, created[4:])
+
+    first_game, second_game = sorted(
+        manager.session.query(models.Game).all(), key=lambda game: game.game_id
+    )
+    for player in created[4:]:
+        ready.set_player_ready(player.p_id)
+
+    assert games.get_first_ready_game(table.table_id).game_id == second_game.game_id
+
+    for player in created[:4]:
+        ready.set_player_ready(player.p_id)
+
+    assert games.get_first_ready_game(table.table_id).game_id == first_game.game_id
+
+
 def test_game_and_table_presentation_methods(services) -> None:
     manager, players, tables, _events, ready, games = services
     event = models.Event(name="Event", started=1)
@@ -160,6 +186,30 @@ def test_table_relevant_time_string(services) -> None:
 
     assert table.get_relevant_times_string("Asia/Tokyo") == "Пятница 02.01 21:30"
     assert table.get_relevant_times_string("Asia/Tokyo", left_cutoff=1767357001) == ""
+
+
+def test_table_service_adds_and_clears_scheduled_times(services) -> None:
+    manager, players, tables, _events, _ready, _games = services
+    event = models.Event(name="Event", started=1)
+    manager.session.add(event)
+    manager.session.commit()
+
+    created = _create_players(players)
+    table = tables.create_table_with_players(event.event_id, "T1", created)
+    manager.session.commit()
+
+    assert tables.add_table_time(table.table_id, 100, 2, reminder_cutoff=150)
+    assert tables.add_table_time(table.table_id, 200, 1, reminder_cutoff=150)
+
+    table = tables.get_table(table_id=table.table_id)
+    assert table is not None
+    assert [(entry.time, entry.games, entry.need_reminder) for entry in table.table_times] == [
+        (100, 2, 0),
+        (200, 1, 1),
+    ]
+
+    assert tables.clear_table_times(table.table_id)
+    assert tables.get_table(table_id=table.table_id).table_times == []
 
 
 def test_player_tables_include_all_started_event_tables(services) -> None:

@@ -84,3 +84,12 @@ class GameService:
                 if self._ready_service.check_player_ready(player.p_id)
             }
         )
+
+    def get_first_ready_game(self, table_id: int):
+        table = self._session_provider.session.get(models.Table, table_id)
+        if table is None:
+            return None
+        return next(
+            (game for game in table.unfinished_games() if self.check_game_ready(game.game_id)),
+            None,
+        )
