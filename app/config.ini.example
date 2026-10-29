@@ -1,7 +1,4 @@
 [Settings]
 lobby = C0123456789012345
 chat = @channel
-
-[Admins]
-tg_id_a1 = 123456789
-tg_id_a2 = 987654321
+admin_chat = @admin_channel
