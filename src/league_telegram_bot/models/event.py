@@ -18,8 +18,6 @@ class Event(Base):
     name: Mapped[str] = mapped_column(nullable=True)
     signup: Mapped[int] = mapped_column(nullable=True, insert_default=1)
     started: Mapped[int] = mapped_column(nullable=True, insert_default=0)
-    global_minimum: Mapped[int] = mapped_column(nullable=True, insert_default=0)
-    global_maximum: Mapped[int] = mapped_column(nullable=True, insert_default=0)
     pantheon_id: Mapped[int] = mapped_column(nullable=True)
     leaderboard_name: Mapped[str] = mapped_column(nullable=True)
     short_name: Mapped[str] = mapped_column(nullable=True)

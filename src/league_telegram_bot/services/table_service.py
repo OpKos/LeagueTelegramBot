@@ -39,12 +39,6 @@ class TableService:
             )
         return self._session_provider.session.get(models.Table, table_id)
 
-    def get_visible_table(self, table_id: int):
-        table = self._session_provider.session.get(models.Table, table_id)
-        if table and table.visible:
-            return table
-        return None
-
     def set_table_time(
         self, table_id: int, timestamps: list[int], lengths: list[int], reminder_cutoff: int
     ):
@@ -71,21 +65,6 @@ class TableService:
     def get_all_tables(self):
         return self._session_provider.session.query(models.Table).all()
 
-    def get_visible_tables(self):
-        return (
-            self._session_provider.session.query(models.Table)
-            .filter(models.Table.visible > 0)
-            .all()
-        )
-
-    def get_unfinished_visible_tables(self):
-        tables = self._session_provider.session.query(models.Table).all()
-        return [
-            table
-            for table in tables
-            if table.unfinished_games and table.visible and table.event.started
-        ]
-
     def get_all_relevant_table_times(self, left_cutoff=None, right_cutoff=None):
         times = (
             self._session_provider.session.query(models.TableTime)
@@ -99,24 +78,6 @@ class TableService:
             times = times.filter(models.TableTime.time <= right_cutoff)
         times_list = times.order_by(models.TableTime.time, models.TableTime.table_id).all()
         return times_list
-
-    def reveal_table(self, table_id: int, cache: bool = False):
-        table = self._session_provider.session.get(models.Table, table_id)
-        if not table or table.visible:
-            return False
-        table.visible = 1
-        if cache:
-            table.reveal_cached = 1
-        self._session_provider.session.commit()
-        return True
-
-    def get_event_cached_tables(self, event_id: int):
-        return (
-            self._session_provider.session.query(models.Table)
-            .filter(models.Table.event_id == event_id)
-            .filter(models.Table.reveal_cached == 1)
-            .all()
-        )
 
     def set_table_chat(self, table_id: int, chat_id: int):
         table = self._session_provider.session.get(models.Table, table_id)

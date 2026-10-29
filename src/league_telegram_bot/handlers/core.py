@@ -4,8 +4,6 @@ import logging
 from collections.abc import Iterable
 from typing import ClassVar
 
-from telegram import Bot
-
 from ..config.app_config import AppConfig
 from ..integrations.tenhou_client import TenhouClient
 from ..services import (
@@ -13,7 +11,6 @@ from ..services import (
     GameService,
     PlayerService,
     ReadyService,
-    RevealService,
     SessionManager,
     TableService,
 )
@@ -33,7 +30,6 @@ class BaseHandlers:
         self.events = EventService(self.session_manager)
         self.ready = ReadyService(self.session_manager)
         self.games = GameService(self.session_manager, ready_service=self.ready)
-        self.reveal = RevealService(self.session_manager, table_service=self.tables)
         self.tenhou_client = TenhouClient(lobby=config.lobby, game_type="0009", is_enable=True)
         self.lobby = config.lobby
         self.chat = config.chat
@@ -62,8 +58,3 @@ class BaseHandlers:
     def tr(self, lang: str, key: str, **kwargs) -> str:
         template = self.locales.get(key).get(lang)
         return template.format(**kwargs)
-
-    async def notify_table_revealed(self, bot: Bot, table) -> None:
-        player_names = [p.irl_name for p in table.players()]
-        message = f"Раскрыт стол {table.name}!\n" + "\n".join(player_names) + "\n"
-        await bot.send_message(chat_id=self.chat, text=message)

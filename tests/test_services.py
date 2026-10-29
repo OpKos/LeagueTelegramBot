@@ -9,7 +9,6 @@ from league_telegram_bot.services import (
     GameService,
     PlayerService,
     ReadyService,
-    RevealService,
     SessionManager,
     TableService,
 )
@@ -24,8 +23,7 @@ def services():
     events = EventService(manager)
     ready = ReadyService(manager)
     games = GameService(manager, ready_service=ready)
-    reveal = RevealService(manager, table_service=tables)
-    yield manager, players, tables, events, ready, games, reveal
+    yield manager, players, tables, events, ready, games
     manager.session.close()
 
 
@@ -42,7 +40,7 @@ def _create_players(players: PlayerService, count: int = 4) -> list[models.Playe
 
 
 def test_player_service_register_and_update(services) -> None:
-    manager, players, _tables, _events, _ready, _games, _reveal = services
+    manager, players, _tables, _events, _ready, _games = services
 
     players.register_player(telegram_id=1, telegram_name="alice", tenhou_id="tenhou_alice")
 
@@ -62,7 +60,7 @@ def test_player_service_register_and_update(services) -> None:
 
 
 def test_table_and_game_creation(services) -> None:
-    manager, players, tables, _events, _ready, games, _reveal = services
+    manager, players, tables, _events, _ready, games = services
 
     event = models.Event(name="Event", started=1)
     manager.session.add(event)
@@ -84,7 +82,7 @@ def test_table_and_game_creation(services) -> None:
 
 
 def test_ready_and_game_status(services) -> None:
-    manager, players, tables, _events, ready, games, _reveal = services
+    manager, players, tables, _events, ready, games = services
 
     event = models.Event(name="Event", started=1)
     manager.session.add(event)
@@ -108,24 +106,20 @@ def test_ready_and_game_status(services) -> None:
     assert games.check_game_ready(game.game_id) is False
 
 
-def test_reveal_service_reveals_table(services) -> None:
-    manager, players, tables, events, _ready, _games, reveal = services
-
-    event = models.Event(name="Reveal", started=1, global_minimum=1, global_maximum=1)
-    manager.session.add(event)
+def test_player_tables_include_all_started_event_tables(services) -> None:
+    manager, players, tables, _events, _ready, _games = services
+    started_event = models.Event(name="Started", started=1)
+    unstarted_event = models.Event(name="Unstarted", started=0)
+    manager.session.add_all([started_event, unstarted_event])
     manager.session.commit()
 
     created = _create_players(players)
-    for player in created:
-        events.add_event_player(event.event_id, player.p_id)
-
-    table = tables.create_table_with_players(event.event_id, "T1", created)
+    started_table = tables.create_table_with_players(
+        started_event.event_id, "Started table", created
+    )
+    tables.create_table_with_players(unstarted_event.event_id, "Unstarted table", created)
     manager.session.commit()
 
-    revealed = reveal.try_reveal(event.event_id, cache=True)
-    assert revealed is not False
-    assert revealed.table_id == table.table_id
-
-    table = manager.session.get(models.Table, table.table_id)
-    assert table.visible == 1
-    assert table.reveal_cached == 1
+    player = manager.session.get(models.Player, created[0].p_id)
+    assert player is not None
+    assert player.all_tables() == [started_table]

@@ -20,7 +20,6 @@ class Player(Base):
     telegram_name: Mapped[str] = mapped_column(nullable=True)
     tenhou_name: Mapped[str] = mapped_column(unique=True)
     irl_name: Mapped[str] = mapped_column(nullable=True)
-    full_ready: Mapped[int] = mapped_column(insert_default=0, server_default=sqlalchemy.text("0"))
     language: Mapped[str] = mapped_column(insert_default="ru", server_default="ru")
     pantheon_id: Mapped[int] = mapped_column(nullable=True)
     is_admin: Mapped[int] = mapped_column(insert_default=0, server_default=sqlalchemy.text("0"))
@@ -29,20 +28,6 @@ class Player(Base):
     player_events: Mapped[list[EventPlayer]] = relationship(
         back_populates="player", lazy="subquery"
     )
-
-    def visible_tables(self):
-        return [
-            tp.table
-            for tp in self.tables_seats
-            if tp.table.visible == 1 and tp.table.event.started == 1
-        ]
-
-    def invisible_tables(self):
-        return [
-            tp.table
-            for tp in self.tables_seats
-            if tp.table.visible == 0 and tp.table.event.started == 1
-        ]
 
     def all_tables(self):
         return [tp.table for tp in self.tables_seats if tp.table.event.started == 1]

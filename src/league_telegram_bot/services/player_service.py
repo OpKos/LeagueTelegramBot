@@ -55,25 +55,6 @@ class PlayerService:
         )
         return query.all()
 
-    def set_target_tables(self, p_id: int, goal: int = 1, full: bool = False):
-        player = self._session_provider.session.get(models.Player, p_id)
-        if player:
-            eps = player.player_events
-            for ep in eps:
-                logger.info(f"Setting target tables for event_player {ep.event_id} {ep.p_id}")
-                if ep.event.started == 0:
-                    continue
-                if full:
-                    ep.table_minimum = len(ep.tables())
-                    logger.info(f"Target set {len(ep.tables())}")
-                else:
-                    ep.table_minimum = len(ep.visible_tables()) + goal
-                    logger.info(f"Target set {len(ep.visible_tables()) + goal}")
-            self._session_provider.session.commit()
-            return True
-        self._session_provider.session.commit()
-        return False
-
     def edit_event_players_leaderboard_group(
         self, event_id: int, player_ids: list[int], increment: int = 1
     ):

@@ -157,45 +157,6 @@ class AdminHandlers:
             await update.effective_message.reply_text(f"Произошла ошибка при отправке логов: {e}")
             log_command_event(update, "get_logs", "failed", logger=logger, exc_info=True)
 
-    @command_handler("force_reveal")
-    async def force_reveal_command(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
-        """Админская команда раскрытия стола через стандартный метод"""
-        user = update.effective_user
-        assert user
-        assert update.effective_message
-
-        if not self.is_admin(user.id):
-            log_command_event(
-                update, "force_reveal", "rejected", logger=logger, reason="admin_only"
-            )
-            await update.effective_message.reply_text("Только для админов")
-            return
-
-        if not context.args or len(context.args) != 1:
-            await update.effective_message.reply_text("Использование: /force_reveal <table_id>")
-            return
-
-        try:
-            table_id = int(context.args[0])
-        except ValueError:
-            log_command_event(
-                update, "force_reveal", "rejected", logger=logger, reason="invalid_table_id"
-            )
-            await update.effective_message.reply_text("ID стола должен быть числом")
-            return
-
-        if self.tables.reveal_table(table_id):
-            table = self.tables.get_table(table_id)
-            assert table
-            await self.notify_table_revealed(context.bot, table)
-            await update.effective_message.reply_text(f"Стол {table_id} раскрыт")
-            log_command_event(update, "force_reveal", "succeeded", logger=logger, table_id=table_id)
-        else:
-            await update.effective_message.reply_text("Ошибка раскрытия стола")
-            log_command_event(update, "force_reveal", "failed", logger=logger, table_id=table_id)
-
     @command_handler("status")
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
@@ -308,44 +269,6 @@ class AdminHandlers:
         await update.effective_message.reply_text("Seating created")
         log_command_event(
             update, "create_seating", "succeeded", logger=logger, event_id=event.event_id
-        )
-
-    @command_handler("reveal_new_tables")
-    async def reveal_new_tables(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user = update.effective_user
-
-        if not self.is_admin(user.id):
-            log_command_event(
-                update, "reveal_new_tables", "rejected", logger=logger, reason="admin_only"
-            )
-            await update.effective_message.reply_text(
-                "Эта команда доступна только администраторам."
-            )
-            return
-
-        event = self.events.get_event(int(context.args[0]))
-        new_min = int(context.args[1])
-        new_max = int(context.args[2])
-        event.global_maximum = new_max
-        nt = self.reveal.try_reveal(event.event_id, cache=True)
-        while nt:
-            nt = self.reveal.try_reveal(event.event_id, cache=True)
-        event.global_minimum = new_min
-        nt = self.reveal.try_reveal(event.event_id, cache=True)
-        while nt:
-            nt = self.reveal.try_reveal(event.event_id, cache=True)
-        cached = self.tables.get_event_cached_tables(event_id=event.event_id)
-        await update.effective_message.reply_text(
-            f"Event {event.event_id} cached tables\n{' '.join(t.name for t in cached)}"
-        )
-        log_command_event(
-            update,
-            "reveal_new_tables",
-            "succeeded",
-            logger=logger,
-            event_id=event.event_id,
-            minimum=new_min,
-            maximum=new_max,
         )
 
     @command_handler("seating_image")
