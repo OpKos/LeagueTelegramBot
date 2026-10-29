@@ -15,16 +15,6 @@ from .utils import game_amount_string, log_command_event, table_time_string
 logger = logging.getLogger(__name__)
 
 
-def remaining_unassigned_games(table: models.Table) -> int:
-    scheduled_games = sum(table_time.games for table_time in table.table_times)
-    return len(table.unfinished_games()) - scheduled_games
-
-
-def validate_scheduled_game_count(table: models.Table, games: int) -> None:
-    if games > remaining_unassigned_games(table):
-        raise TableTimeInputError("too_many_games", "Указано больше игр, чем осталось.")
-
-
 class TableHandlers:
     @command_handler("play")
     async def play_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -276,7 +266,7 @@ class TableHandlers:
                 now,
                 self.timezone,
             )
-            validate_scheduled_game_count(table, scheduled_time.games)
+            table.validate_scheduled_game_count(scheduled_time.games)
         except TableTimeInputError as error:
             await update.effective_message.reply_text(
                 self.tr("ru", f"set_time_{error.reason}", **error.params)

@@ -11,11 +11,10 @@ import pytest
 from league_telegram_bot.handlers import tables as table_handlers
 from league_telegram_bot.handlers.tables import (
     TableHandlers,
-    TableTimeInputError,
     parse_table_time,
-    validate_scheduled_game_count,
 )
-from league_telegram_bot.time_utils import datetime_to_timestamp
+from league_telegram_bot.models import Game, Table, TableTime
+from league_telegram_bot.time_utils import TableTimeInputError, datetime_to_timestamp
 
 
 def test_parse_table_time_with_numeric_day_and_colonless_minutes() -> None:
@@ -93,17 +92,16 @@ def test_parse_table_time_rejects_invalid_input(
 
 
 def test_validate_scheduled_game_count_subtracts_existing_allocations() -> None:
-    class TableStub:
-        table_times = [type("TimeStub", (), {"games": 2})()]
+    table = Table(
+        table_times=[TableTime(games=2)],
+        games=[Game(game_id=game_id, started=0) for game_id in range(3)],
+    )
 
-        @staticmethod
-        def unfinished_games():
-            return [object(), object(), object()]
-
-    validate_scheduled_game_count(TableStub(), 1)
+    assert table.remaining_unassigned_games() == 1
+    table.validate_scheduled_game_count(1)
 
     with pytest.raises(TableTimeInputError) as error:
-        validate_scheduled_game_count(TableStub(), 2)
+        table.validate_scheduled_game_count(2)
 
     assert error.value.reason == "too_many_games"
 
@@ -118,6 +116,7 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
         table_times=[SimpleNamespace(games=2)],
         unfinished_games=lambda: [object(), object(), object()],
         players=lambda: [player],
+        validate_scheduled_game_count=Mock(),
     )
     scheduled_times = Mock()
     scheduled_times.get_table.return_value = table
@@ -156,6 +155,8 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
     handlers.translate = lambda lang: lambda key, **kwargs: handlers.tr(lang, key, **kwargs)
 
     asyncio.run(handlers.set_time_command(update, context))
+
+    table.validate_scheduled_game_count.assert_called_once_with(1)
 
     expected_timestamp = datetime_to_timestamp(
         datetime.datetime(2026, 1, 2, 17, 0), "Europe/Moscow"

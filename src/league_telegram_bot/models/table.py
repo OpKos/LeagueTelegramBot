@@ -6,7 +6,11 @@ import sqlalchemy
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from ..time_utils import RUSSIAN_WEEKDAYS, timestring_from_timestamp
+from ..time_utils import (
+    RUSSIAN_WEEKDAYS,
+    TableTimeInputError,
+    timestring_from_timestamp,
+)
 from .base import Base
 
 if TYPE_CHECKING:
@@ -46,6 +50,14 @@ class Table(Base):
                 if player not in players:
                     players.append(player)
         return players
+
+    def remaining_unassigned_games(self) -> int:
+        scheduled_games = sum(table_time.games for table_time in self.table_times)
+        return len(self.unfinished_games()) - scheduled_games
+
+    def validate_scheduled_game_count(self, games: int) -> None:
+        if games > self.remaining_unassigned_games():
+            raise TableTimeInputError("too_many_games", "Указано больше игр, чем осталось.")
 
     def players_string(self, mention: bool = False) -> str:
         return "\n".join(
