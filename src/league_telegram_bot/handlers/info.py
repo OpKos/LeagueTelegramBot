@@ -167,7 +167,7 @@ class InfoHandlers:
             log_command_event(update, "pantheon", "succeeded", logger=logger, active_events=0)
             await update.effective_message.reply_text("Активных событий нет")
             return
-        links = [f"<a href='{event.pantheon_link()}'>Дивизион {event.name}</a>" for event in events]
+        links = [f"<a href='{event.pantheon_link()}'>{event.short_name}</a>" for event in events]
         await update.effective_message.reply_text(
             "\n".join(links),
             parse_mode=ParseMode.HTML,
