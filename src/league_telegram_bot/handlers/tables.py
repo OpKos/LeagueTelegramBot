@@ -139,28 +139,24 @@ def validate_scheduled_game_count(table: models.Table, games: int) -> None:
 
 
 class TableHandlers:
-    @command_handler("start_table")
-    async def start_table_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    @command_handler("play")
+    async def play_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
-            log_command_event(
-                update, "start_table", "rejected", logger=logger, reason="chat_has_no_table"
-            )
+            log_command_event(update, "play", "rejected", logger=logger, reason="chat_has_no_table")
             await update.effective_message.reply_text(self.tr("ru", "no_table_in_chat"))
             return
 
         if not table.unfinished_games():
             log_command_event(
-                update, "start_table", "rejected", logger=logger, reason="no_unfinished_games"
+                update, "play", "rejected", logger=logger, reason="no_unfinished_games"
             )
             await update.effective_message.reply_text(text=self.tr("ru", "no_unfinished_games"))
             return
 
         msg = self.games.get_table_ready_string(table_id=table.table_id)
         await update.message.reply_text(msg, reply_markup=self._ready_button_reply_markup)
-        log_command_event(
-            update, "start_table", "succeeded", logger=logger, table_id=table.table_id
-        )
+        log_command_event(update, "play", "succeeded", logger=logger, table_id=table.table_id)
 
     @callback_query_handler(pattern=r"^RB")
     async def ready_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

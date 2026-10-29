@@ -12,8 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 class RegistrationHandlers:
-    @command_handler("register")
-    async def register_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    @command_handler("set_nickname")
+    async def set_nickname_command(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         """
         Регистрирует нового игрока в системе.
 
@@ -27,7 +29,7 @@ class RegistrationHandlers:
         assert user
         if not args or len(args) != 1:
             log_command_event(
-                update, "register", "rejected", logger=logger, reason="invalid_arguments"
+                update, "set_nickname", "rejected", logger=logger, reason="invalid_arguments"
             )
             await update.effective_message.reply_text(
                 self.tr_for_user(user.id, "register_invalid_args")
@@ -51,7 +53,7 @@ class RegistrationHandlers:
                 )
             log_command_event(
                 update,
-                "register",
+                "set_nickname",
                 "succeeded",
                 logger=logger,
                 action="nickname_unchanged" if old_name == tenhou_name else "nickname_updated",
@@ -68,7 +70,7 @@ class RegistrationHandlers:
             + "\nUse /set_language to change your language"
         )
         log_command_event(
-            update, "register", "succeeded", logger=logger, action="player_registered"
+            update, "set_nickname", "succeeded", logger=logger, action="player_registered"
         )
 
     @command_handler("set_language")
