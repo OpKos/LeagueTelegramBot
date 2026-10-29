@@ -4,30 +4,29 @@ import datetime
 import logging
 import os
 
-import pytz
 from telegram import InputMediaPhoto
 from telegram.ext import ContextTypes
 
 from ..integrations.pantheon import PantheonClient
 from ..leaderboard import get_leaderboard_image
+from ..time_utils import now_in_timezone, time_in_timezone, timestring_from_timestamp
 from .timetable_image import create_timetable_image
-from .utils import timestring_from_timestamp
 
 logger = logging.getLogger()
 
 
 async def startup_job_callback(context: ContextTypes.DEFAULT_TYPE):
     handlers = context.job.data.get("handlers")
-    tz = pytz.timezone("Europe/Moscow")
-    daily_chat_callback_time = datetime.time(hour=10, minute=0, tzinfo=tz)
+    timezone = handlers.timezone
+    daily_chat_callback_time = time_in_timezone(10, 0, timezone)
     context.job_queue.run_daily(
         send_daily_chat_message,
         time=daily_chat_callback_time,
         name="daily posts",
         data={"handlers": handlers},
     )
-    morning_calllback_time = datetime.time(hour=10, minute=0, tzinfo=tz)
-    evening_callback_time = datetime.time(hour=21, minute=0, tzinfo=tz)
+    morning_calllback_time = time_in_timezone(10, 0, timezone)
+    evening_callback_time = time_in_timezone(21, 0, timezone)
     context.job_queue.run_daily(
         remind_tables,
         time=morning_calllback_time,
@@ -52,15 +51,14 @@ async def send_daily_chat_message(context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     image_links = []
 
-    timezone = pytz.timezone("Europe/Moscow")
-    now = datetime.datetime.now(tz=timezone)
+    now = now_in_timezone(handlers.timezone)
     cutoff = now + datetime.timedelta(hours=30)
     cutoff = int(cutoff.timestamp())
     timetable = handlers.tables.get_all_relevant_table_times(
         right_cutoff=cutoff, left_cutoff=int(now.timestamp())
     )
     if timetable:
-        tt_image = create_timetable_image(timetable, "timetable.png")
+        tt_image = create_timetable_image(timetable, "timetable.png", handlers.timezone)
         image_links.append(tt_image)
 
     for event in events:
@@ -68,7 +66,9 @@ async def send_daily_chat_message(context: ContextTypes.DEFAULT_TYPE) -> None:
             event_id_list=[event.pantheon_id], order="desc", order_by="rating"
         )
         if result.get("ok"):
-            image_link = get_leaderboard_image(event=event, pantheon_data=result.get("players"))
+            image_link = get_leaderboard_image(
+                event=event, pantheon_data=result.get("players"), timezone=handlers.timezone
+            )
             image_links.append(image_link)
             logger.info(f"Создана таблица {image_link} для события {event.event_id}")
         else:
@@ -88,8 +88,7 @@ async def send_daily_chat_message(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def remind_tables(context: ContextTypes.DEFAULT_TYPE) -> None:
     handlers = context.job.data.get("handlers")
-    timezone = pytz.timezone("Europe/Moscow")
-    now = datetime.datetime.now(tz=timezone)
+    now = now_in_timezone(handlers.timezone)
     cutoff = now + datetime.timedelta(hours=15)
     cutoff = int(cutoff.timestamp())
     times = handlers.tables.get_all_relevant_table_times(
@@ -98,7 +97,10 @@ async def remind_tables(context: ContextTypes.DEFAULT_TYPE) -> None:
     for time in times:
         if time.need_reminder == 0:
             continue
-        message = f"Напоминание о назначенном времени:\n{timestring_from_timestamp(time.time, day=True, weekday=True)}"
+        message = (
+            "Напоминание о назначенном времени:\n"
+            f"{timestring_from_timestamp(time.time, day=True, weekday=True, timezone=handlers.timezone)}"
+        )
         try:
             await context.bot.send_message(chat_id=time.table.chat_id, text=message)
             time.need_reminder = 0

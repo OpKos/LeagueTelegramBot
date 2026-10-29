@@ -128,7 +128,9 @@ class PantheonHandlers:
             event_id_list=[event.pantheon_id], order="desc", order_by="rating"
         )
         if result.get("ok"):
-            image_link = get_leaderboard_image(event=event, pantheon_data=result.get("players"))
+            image_link = get_leaderboard_image(
+                event=event, pantheon_data=result.get("players"), timezone=self.timezone
+            )
             await update.effective_message.chat.send_photo(photo=image_link)
             log_command_event(update, "leaderboard", "succeeded", logger=logger, event_id=event.id)
             return

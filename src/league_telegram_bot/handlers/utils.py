@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import datetime
 import logging
 from typing import TYPE_CHECKING
 
-import pytz
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+
+from ..time_utils import timestring_from_timestamp
 
 if TYPE_CHECKING:
     from ..models import TableTime
@@ -55,31 +55,17 @@ ready_button_reply_markup = InlineKeyboardMarkup(
 )
 
 
-def timestring_from_timestamp(timestamp: int, weekday: bool = False, day: bool = False) -> str:
-    timezone = pytz.timezone("Europe/Moscow")
-    res = ""
-    weekdays = [
-        "Понедельник",
-        "Вторник",
-        "Среда",
-        "Четверг",
-        "Пятница",
-        "Суббота",
-        "Воскресенье",
-    ]
-    date = datetime.datetime.fromtimestamp(timestamp, tz=timezone)
-    if weekday:
-        res += weekdays[date.weekday()] + " "
-    if day:
-        res += f"{date.strftime('%d.%m')} "
-    res += f"{date.strftime('%H:%M')}"
-    return res
-
-
-def table_time_string(table_time: TableTime, mention: bool = False, explicit: bool = True) -> str:
+def table_time_string(
+    table_time: TableTime,
+    timezone: str,
+    mention: bool = False,
+    explicit: bool = True,
+) -> str:
     table = table_time.table
     ans = (
-        timestring_from_timestamp(table_time.time, weekday=explicit, day=explicit)
+        timestring_from_timestamp(
+            table_time.time, weekday=explicit, day=explicit, timezone=timezone
+        )
         + " - "
         + f"Стол {table.name} (ханчанов: {table_time.games}):\n"
     )

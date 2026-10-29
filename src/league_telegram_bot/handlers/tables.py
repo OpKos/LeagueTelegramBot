@@ -3,11 +3,11 @@ from __future__ import annotations
 import datetime
 import logging
 
-import pytz
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from ..time_utils import datetime_to_timestamp, now_in_timezone
 from .decorators import callback_query_handler, command_handler
 from .utils import log_command_event, table_time_string
 
@@ -159,8 +159,7 @@ class TableHandlers:
         game_lengths = []
         success_times = []
 
-        timezone = pytz.timezone("Europe/Moscow")
-        now = datetime.datetime.now(tz=timezone)
+        now = now_in_timezone(self.timezone)
         for day, time, games in zip(days, times, lengths, strict=False):
             games = int(games)
             if games <= 0:
@@ -212,10 +211,10 @@ class TableHandlers:
                 month = prospective_date.month
                 year = prospective_date.year
             try:
-                prospective_start = timezone.localize(
-                    datetime.datetime(year=year, month=month, day=day, hour=hour, minute=minute)
+                prospective_start = datetime.datetime(
+                    year=year, month=month, day=day, hour=hour, minute=minute
                 )
-                start_times.append(int(prospective_start.timestamp()))
+                start_times.append(datetime_to_timestamp(prospective_start, self.timezone))
                 success_times.append(prospective_start.strftime("%d.%m %H:%M") + f" (игр: {games})")
                 game_lengths.append(games)
             except ValueError:
@@ -273,8 +272,7 @@ class TableHandlers:
                 update, "remove_time", "rejected", logger=logger, reason="not_table_player"
             )
             return
-        timezone = pytz.timezone("Europe/Moscow")
-        now = datetime.datetime.now(tz=timezone)
+        now = now_in_timezone(self.timezone)
         cutoff = now + datetime.timedelta(hours=12)
         cutoff = int(cutoff.timestamp())
         self.tables.set_table_time(
@@ -300,10 +298,12 @@ class TableHandlers:
             )
             return
 
-        now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
+        now = now_in_timezone(self.timezone)
         cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
         known_times = self.tables.get_all_relevant_table_times(left_cutoff=cutoff)
-        known_str = "".join([table_time_string(i, explicit=True) for i in known_times])
+        known_str = "".join(
+            table_time_string(i, explicit=True, timezone=self.timezone) for i in known_times
+        )
         ans = known_str
         if ans == "":
             ans = "Игр нет"

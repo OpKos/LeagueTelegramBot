@@ -19,6 +19,7 @@ class AppConfig:
     locales_path: Path
     token_path: Path
     logging_config_path: Path
+    timezone: str
 
 
 def load_app_config() -> AppConfig:
@@ -29,6 +30,7 @@ def load_app_config() -> AppConfig:
     lobby = parser.get("Settings", "lobby")
     chat = parser.get("Settings", "chat")
     admin_chat = parser.get("Settings", "admin_chat")
+    timezone = parser.get("Settings", "timezone")
     database_url = build_database_url(load_database_settings())
 
     return AppConfig(
@@ -40,6 +42,7 @@ def load_app_config() -> AppConfig:
         locales_path=app_path("locales.json"),
         token_path=app_path("token.txt"),
         logging_config_path=app_path("logging.ini"),
+        timezone=timezone,
     )
 
 

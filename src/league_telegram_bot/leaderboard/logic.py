@@ -1,9 +1,7 @@
-import datetime
 import json
 
-import pytz
-
 from .. import models
+from ..time_utils import now_in_timezone
 from . import create_leaderboard_image
 
 
@@ -30,7 +28,7 @@ def get_leaderboard_data(event: models.Event, pantheon_data: list) -> list:
     return player_data
 
 
-def get_leaderboard_image(event: models.Event, pantheon_data: list) -> str:
+def get_leaderboard_image(event: models.Event, pantheon_data: list, timezone: str) -> str:
     player_data = get_leaderboard_data(event, pantheon_data)
     finished_games = 0
     total_games = 0
@@ -39,7 +37,7 @@ def get_leaderboard_image(event: models.Event, pantheon_data: list) -> str:
             total_games += 1
             if game.started:
                 finished_games += 1
-    now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
+    now = now_in_timezone(timezone)
     filename = f"leaderboard{event.name}{now.timestamp()}.png"
     time_and_played_str = f"{now.strftime('%d.%m.%y')}, {finished_games}/{total_games} игр"
     specs = json.loads(event.leaderboard_specs)

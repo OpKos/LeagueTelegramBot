@@ -2,3 +2,4 @@
 lobby = C0123456789012345
 chat = @channel
 admin_chat = @admin_channel
+timezone = Europe/Moscow

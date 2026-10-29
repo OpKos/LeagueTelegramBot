@@ -42,3 +42,42 @@ def test_entrypoint_importable() -> None:
     from league_telegram_bot import entrypoint
 
     assert callable(entrypoint.main)
+
+
+def test_app_config_reads_configured_timezone(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from league_telegram_bot.config import app_config
+
+    config_path = tmp_path / "config.ini"
+    config_path.write_text(
+        "[Settings]\nlobby = test\nchat = test\nadmin_chat = test\ntimezone = Asia/Tokyo\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_config, "app_path", lambda name: tmp_path / name)
+    monkeypatch.setattr(app_config, "load_database_settings", lambda: None)
+    monkeypatch.setattr(app_config, "build_database_url", lambda _settings: "sqlite://")
+
+    config = app_config.load_app_config()
+
+    assert config.timezone == "Asia/Tokyo"
+
+
+def test_app_config_requires_timezone(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from league_telegram_bot.config import app_config
+
+    config_path = tmp_path / "config.ini"
+    config_path.write_text(
+        "[Settings]\nlobby = test\nchat = test\nadmin_chat = test\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_config, "app_path", lambda name: tmp_path / name)
+    monkeypatch.setattr(app_config, "load_database_settings", lambda: None)
+    monkeypatch.setattr(app_config, "build_database_url", lambda _settings: "sqlite://")
+
+    with pytest.raises(app_config.configparser.NoOptionError):
+        app_config.load_app_config()

@@ -34,6 +34,7 @@ class BaseHandlers:
         self.lobby = config.lobby
         self.chat = config.chat
         self.admin_chat = config.admin_chat
+        self.timezone = config.timezone
         self.locales = locales
         self.settings_path = config.config_path
         self._ready_button_reply_markup = ready_button_reply_markup

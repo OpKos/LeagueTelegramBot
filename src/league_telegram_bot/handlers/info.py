@@ -3,13 +3,13 @@ from __future__ import annotations
 import datetime
 import logging
 
-import pytz
 from telegram import LinkPreviewOptions, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from ..time_utils import now_in_timezone, timestring_from_timestamp
 from .decorators import command_handler
-from .utils import log_command_event, timestring_from_timestamp
+from .utils import log_command_event
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class InfoHandlers:
             f"Имя: {player.irl_name}\n\n"
         )
 
-        now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
+        now = now_in_timezone(self.timezone)
         cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
 
         tables = player.all_tables()
@@ -80,7 +80,7 @@ class InfoHandlers:
             if table.unfinished_games and table.get_relevant_times(left_cutoff=cutoff):
                 message += "Время:\n"
                 times = [
-                    timestring_from_timestamp(time, weekday=True, day=True)
+                    timestring_from_timestamp(time, weekday=True, day=True, timezone=self.timezone)
                     for time in table.get_relevant_times(left_cutoff=cutoff)
                 ]
                 message += "\n".join(times) + "\n"
@@ -129,13 +129,13 @@ class InfoHandlers:
             message += f"{i.irl_name} ({i.dirty_mention()})\n"
         message += f"Сыграно: {len(table.games) - len(table.unfinished_games())} из {len(table.games)} игр\n"
 
-        now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
+        now = now_in_timezone(self.timezone)
         cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
 
         if table.unfinished_games() and table.get_relevant_times(left_cutoff=cutoff):
             message += "Время:\n"
             times = [
-                timestring_from_timestamp(time, weekday=True, day=True)
+                timestring_from_timestamp(time, weekday=True, day=True, timezone=self.timezone)
                 for time in table.get_relevant_times(left_cutoff=cutoff)
             ]
             message += "\n".join(times)
