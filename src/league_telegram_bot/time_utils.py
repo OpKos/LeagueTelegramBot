@@ -3,6 +3,16 @@ from __future__ import annotations
 import datetime
 from zoneinfo import ZoneInfo
 
+RUSSIAN_WEEKDAYS = (
+    "Понедельник",
+    "Вторник",
+    "Среда",
+    "Четверг",
+    "Пятница",
+    "Суббота",
+    "Воскресенье",
+)
+
 
 def get_timezone(timezone: str) -> datetime.tzinfo:
     return ZoneInfo(timezone)
@@ -34,20 +44,12 @@ def timestring_from_timestamp(
     timezone: str,
     weekday: bool = False,
     day: bool = False,
+    weekday_names: list[str] = RUSSIAN_WEEKDAYS,
 ) -> str:
-    weekdays = [
-        "Понедельник",
-        "Вторник",
-        "Среда",
-        "Четверг",
-        "Пятница",
-        "Суббота",
-        "Воскресенье",
-    ]
     date = datetime_from_timestamp(timestamp, timezone)
     result = ""
     if weekday:
-        result += weekdays[date.weekday()] + " "
+        result += weekday_names[date.weekday()] + " "
     if day:
         result += f"{date.strftime('%d.%m')} "
     return result + date.strftime("%H:%M")

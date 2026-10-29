@@ -57,5 +57,36 @@ class BaseHandlers:
         return player and player.is_admin
 
     def tr(self, lang: str, key: str, **kwargs) -> str:
-        template = self.locales.get(key).get(lang)
+        template = self.locales[key][lang]
         return template.format(**kwargs)
+
+    def language_for_user(self, user_id: int | None) -> str:
+        if user_id is not None:
+            player = self.players.get_player(telegram_id=user_id)
+            if player is not None and player.language in ("ru", "en"):
+                return player.language
+        return "ru"
+
+    def language_for_update(self, update) -> str:
+        user = update.effective_user
+        return self.language_for_user(user.id if user is not None else None)
+
+    def tr_for_user(self, user_id: int | None, key: str, **kwargs) -> str:
+        return self.tr(self.language_for_user(user_id), key, **kwargs)
+
+    def weekday_names(self, lang: str) -> list[str]:
+        return [
+            self.tr(lang, f"weekday_{weekday}")
+            for weekday in (
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+                "sunday",
+            )
+        ]
+
+    def translate(self, lang: str):
+        return lambda key, **kwargs: self.tr(lang, key, **kwargs)

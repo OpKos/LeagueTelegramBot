@@ -159,8 +159,13 @@ def test_game_and_table_presentation_methods(services) -> None:
         ["✅ Player 0", "❌ Player 1", "❌ Player 2", "❌ Player 3"]
     )
     assert game.are_players_ready({player.p_id for player in created}) is True
-    assert game.info_string() == (
-        f"ID игры: {game.game_id}\n🔴 Не запущена\nPlayer 0\nPlayer 1\nPlayer 2\nPlayer 3\n\n"
+    translations = {
+        "game_started": "Started",
+        "game_not_started": "Not started",
+        "game_info": "Game {game_id}\n{status}\n{players}\n\n",
+    }
+    assert game.info_string(lambda key, **kwargs: translations[key].format(**kwargs)) == (
+        f"Game {game.game_id}\nNot started\nPlayer 0\nPlayer 1\nPlayer 2\nPlayer 3\n\n"
     )
 
 

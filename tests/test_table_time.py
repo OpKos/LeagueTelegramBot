@@ -29,6 +29,15 @@ def test_parse_table_time_with_weekday_and_hour_only() -> None:
     assert result.display == "02.01 17:00 (игр: 1)"
 
 
+@pytest.mark.parametrize("weekday", ["fri", "friday", "Fri.", "FRIDAY"])
+def test_parse_table_time_accepts_english_weekday_names(weekday: str) -> None:
+    now = datetime.datetime(2026, 1, 1, 10, 0, tzinfo=datetime.UTC)
+
+    result = parse_table_time(weekday, "17", "1", now, "Europe/Moscow")
+
+    assert result.display == "02.01 17:00 (игр: 1)"
+
+
 @pytest.mark.parametrize(
     ("day_arg", "time_arg", "games_arg", "reason"),
     [

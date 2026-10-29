@@ -25,14 +25,13 @@ class InfoHandlers:
         user = update.effective_user
         assert user
         assert update.effective_message
+        lang = self.language_for_user(user.id)
 
         if update.effective_message.chat.type != "private":
             log_command_event(
                 update, "player_info", "rejected", logger=logger, reason="private_chat_required"
             )
-            await update.effective_message.reply_text(
-                "Эта команда доступна только в личных сообщениях с ботом."
-            )
+            await update.effective_message.reply_text(self.tr(lang, "private_chat_required"))
             return
 
         if not context.args:
@@ -42,7 +41,7 @@ class InfoHandlers:
             log_command_event(
                 update, "player_info", "rejected", logger=logger, reason="invalid_arguments"
             )
-            await update.effective_message.reply_text("Использование: /player_info <telegram_name>")
+            await update.effective_message.reply_text(self.tr(lang, "player_info_usage"))
             return
         else:
             telegram_name = context.args[0]
@@ -54,17 +53,24 @@ class InfoHandlers:
             log_command_event(
                 update, "player_info", "rejected", logger=logger, reason="player_not_found"
             )
-            await update.effective_message.reply_text("Пользователь не зарегистрирован.")
+            await update.effective_message.reply_text(self.tr(lang, "player_not_found"))
             return
 
         message = ""
         if self.is_admin(user.id):
-            message += f"ID в базе: {player.p_id}\nTelegram ID: {player.telegram_id}\n"
+            message += self.tr(
+                lang,
+                "player_info_admin_ids",
+                player_id=player.p_id,
+                telegram_id=player.telegram_id,
+            )
 
-        message += (
-            f"Telegram хэндл: @{player.telegram_name}\n"
-            f"Tenhou ник: {player.tenhou_name}\n"
-            f"Имя: {player.irl_name}\n\n"
+        message += self.tr(
+            lang,
+            "player_info_profile",
+            telegram_name=player.telegram_name,
+            tenhou_name=player.tenhou_name,
+            name=player.irl_name,
         )
 
         now = now_in_timezone(self.timezone)
@@ -74,12 +80,27 @@ class InfoHandlers:
         tables.sort(key=lambda el: el.deadline_group)
 
         for table in tables:
-            message += f"Стол {table.name}\n"
+            message += self.tr(lang, "table_name", table=table.name) + "\n"
             message += table.players_string(mention=True) + "\n"
             if table.unfinished_games and table.get_relevant_times(left_cutoff=cutoff):
-                message += "Время:\n"
-                message += table.get_relevant_times_string(self.timezone, left_cutoff=cutoff) + "\n"
-            message += f"Сыграно: {len(table.games) - len(table.unfinished_games())} из {len(table.games)} игр\n\n"
+                message += self.tr(lang, "table_times_heading")
+                message += (
+                    table.get_relevant_times_string(
+                        self.timezone,
+                        left_cutoff=cutoff,
+                        weekday_names=tuple(self.weekday_names(lang)),
+                    )
+                    + "\n"
+                )
+            message += (
+                self.tr(
+                    lang,
+                    "table_played_games",
+                    played=len(table.games) - len(table.unfinished_games()),
+                    total=len(table.games),
+                )
+                + "\n"
+            )
 
         await update.effective_message.reply_text(message)
         log_command_event(update, "player_info", "succeeded", logger=logger, player_id=player.p_id)
@@ -94,21 +115,20 @@ class InfoHandlers:
         user = update.effective_user
         assert user
         assert update.effective_message
+        lang = self.language_for_user(user.id)
 
         if update.effective_message.chat.type != "private":
             log_command_event(
                 update, "table_info", "rejected", logger=logger, reason="private_chat_required"
             )
-            await update.effective_message.reply_text(
-                "Эта команда доступна только в личных сообщениях с ботом."
-            )
+            await update.effective_message.reply_text(self.tr(lang, "private_chat_required"))
             return
 
         if not context.args or len(context.args) != 1:
             log_command_event(
                 update, "table_info", "rejected", logger=logger, reason="invalid_arguments"
             )
-            await update.effective_message.reply_text("Использование: /table_info <table_id>")
+            await update.effective_message.reply_text(self.tr(lang, "table_info_usage"))
             return
 
         table_name = context.args[0]
@@ -117,22 +137,31 @@ class InfoHandlers:
             log_command_event(
                 update, "table_info", "rejected", logger=logger, reason="table_not_found"
             )
-            await update.effective_message.reply_text("Стол не найден.")
+            await update.effective_message.reply_text(self.tr(lang, "table_not_found"))
             return
-        message = f"Стол {table.table_id}\n"
+        message = self.tr(lang, "table_name", table=table.table_id) + "\n"
         message += table.players_string(mention=True) + "\n"
-        message += f"Сыграно: {len(table.games) - len(table.unfinished_games())} из {len(table.games)} игр\n"
+        message += self.tr(
+            lang,
+            "table_played_games",
+            played=len(table.games) - len(table.unfinished_games()),
+            total=len(table.games),
+        )
 
         now = now_in_timezone(self.timezone)
         cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
 
         if table.unfinished_games() and table.get_relevant_times(left_cutoff=cutoff):
-            message += "Время:\n"
-            message += table.get_relevant_times_string(self.timezone, left_cutoff=cutoff)
+            message += self.tr(lang, "table_times_heading")
+            message += table.get_relevant_times_string(
+                self.timezone,
+                left_cutoff=cutoff,
+                weekday_names=tuple(self.weekday_names(lang)),
+            )
         message += "\n\n"
 
         for game in table.games:
-            message += game.info_string()
+            message += game.info_string(self.translate(lang))
 
         await update.effective_message.reply_text(message)
         log_command_event(update, "table_info", "succeeded", logger=logger, table_id=table.table_id)
@@ -146,10 +175,11 @@ class InfoHandlers:
     @command_handler("pantheon")
     async def pantheon_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         assert update.effective_message
+        lang = self.language_for_update(update)
         events = self.events.get_started_events()
         if not events:
             log_command_event(update, "pantheon", "succeeded", logger=logger, active_events=0)
-            await update.effective_message.reply_text("Активных событий нет")
+            await update.effective_message.reply_text(self.tr(lang, "pantheon_no_events"))
             return
         links = [f"<a href='{event.pantheon_link()}'>{event.short_name}</a>" for event in events]
         await update.effective_message.reply_text(

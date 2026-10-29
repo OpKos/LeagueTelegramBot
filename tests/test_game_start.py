@@ -35,6 +35,17 @@ def _game_and_update():
     context = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
     handler = object.__new__(TableHandlers)
     handler.chat = -100
+
+    def translate(_lang, key, **kwargs):
+        if key == "start_game_done":
+            return "Приятной игры!"
+        if key == "start_game_announcement":
+            return f"Игра за столом {kwargs['table']} запущена:\n{kwargs['players']}"
+        if key == "start_game_missing_players":
+            return f"Игроки не в лобби: {kwargs['players']}, статус готовности обновлён."
+        raise AssertionError(f"Unexpected translation key: {key}")
+
+    handler.tr = translate
     handler._ready_button_reply_markup = "ready-markup"
     handler.players = Mock()
     handler.ready = Mock()

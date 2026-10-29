@@ -22,5 +22,333 @@
     "language_set": {
         "ru": "Язык переключён на русский.",
         "en": "Language switched to English."
+    },
+    "language_invalid_args": {
+        "ru": "Использование: /set_language ru|en",
+        "en": "Usage: /set_language ru|en"
+    },
+    "language_hint": {
+        "ru": "Чтобы выбрать язык, используйте /set_language ru или /set_language en.",
+        "en": "Choose your language with /set_language ru or /set_language en."
+    },
+    "register_welcome": {
+        "ru": "Вы успешно зарегистрированы!",
+        "en": "You have been registered successfully!"
+    },
+    "private_chat_required": {
+        "ru": "Эта команда доступна только в личных сообщениях с ботом.",
+        "en": "This command is only available in a private chat with the bot."
+    },
+    "no_table_in_chat": {
+        "ru": "У чата не указан стол, используйте /set_chat",
+        "en": "No table is assigned to this chat. Use /set_chat."
+    },
+    "no_unfinished_games": {
+        "ru": "Все игры за столом сыграны",
+        "en": "All games at this table have been played."
+    },
+    "cancelled": {
+        "ru": "Отменено",
+        "en": "Cancelled"
+    },
+    "not_registered_system": {
+        "ru": "Вы не зарегистрированы в системе.",
+        "en": "You are not registered."
+    },
+    "cancel_button": {
+        "ru": "Отмена",
+        "en": "Cancel"
+    },
+    "game_started": {
+        "ru": "🟢 Запущена",
+        "en": "🟢 Started"
+    },
+    "game_not_started": {
+        "ru": "🔴 Не запущена",
+        "en": "🔴 Not started"
+    },
+    "game_info": {
+        "ru": "ID игры: {game_id}\n{status}\n{players}\n\n",
+        "en": "Game ID: {game_id}\n{status}\n{players}\n\n"
+    },
+    "weekday_monday": {
+        "ru": "Понедельник",
+        "en": "Monday"
+    },
+    "weekday_tuesday": {
+        "ru": "Вторник",
+        "en": "Tuesday"
+    },
+    "weekday_wednesday": {
+        "ru": "Среда",
+        "en": "Wednesday"
+    },
+    "weekday_thursday": {
+        "ru": "Четверг",
+        "en": "Thursday"
+    },
+    "weekday_friday": {
+        "ru": "Пятница",
+        "en": "Friday"
+    },
+    "weekday_saturday": {
+        "ru": "Суббота",
+        "en": "Saturday"
+    },
+    "weekday_sunday": {
+        "ru": "Воскресенье",
+        "en": "Sunday"
+    },
+    "game_amount_one_en": {
+        "ru": "{count} game",
+        "en": "{count} game"
+    },
+    "game_amount_many_en": {
+        "ru": "{count} games",
+        "en": "{count} games"
+    },
+    "games_amount_ru_one": {
+        "ru": "{count} ханчан",
+        "en": "{count} game"
+    },
+    "games_amount_ru_few": {
+        "ru": "{count} ханчана",
+        "en": "{count} games"
+    },
+    "games_amount_ru_many": {
+        "ru": "{count} ханчанов",
+        "en": "{count} games"
+    },
+    "table_time_string": {
+        "ru": "{time} - Стол {table} ({games}):\n{players}.\n\n",
+        "en": "{time} - Table {table} ({games}):\n{players}.\n\n"
+    },
+    "start_table_usage": {
+        "ru": "Использование: /start_table",
+        "en": "Usage: /start_table"
+    },
+    "set_time_usage": {
+        "ru": "Использование: /set_time <день> <время> <число игр>\nДень указывайте числом месяца или кратким названием дня недели (пн/вт/ср/чт/пт/сб/вс или mon/tue/wed/thu/fri/sat/sun).\nВремя можно указывать с минутами или без; разделитель не обязателен.\nПримеры: /set_time вт 17 2, /set_time 25 1715 4",
+        "en": "Usage: /set_time <day> <time> <game count>\nUse a day of the month or a short weekday name (mon/tue/wed/thu/fri/sat/sun).\nTime may include minutes; a separator is optional.\nExamples: /set_time tue 17 2, /set_time 25 1715 4"
+    },
+    "set_time_no_games": {
+        "ru": "Нет неначатых игр за столом {table}.",
+        "en": "There are no unstarted games at table {table}."
+    },
+    "set_time_not_table_player": {
+        "ru": "Указывать время можно только за своим столом.",
+        "en": "You can only schedule a time for your own table."
+    },
+    "set_time_invalid_game_count": {
+        "ru": "Количество игр должно быть положительным целым числом.",
+        "en": "The game count must be a positive whole number."
+    },
+    "set_time_nonpositive_game_count": {
+        "ru": "Количество игр должно быть положительным.",
+        "en": "The game count must be positive."
+    },
+    "set_time_too_many_games": {
+        "ru": "Указано больше игр, чем осталось.",
+        "en": "The game count exceeds the number of unstarted games remaining."
+    },
+    "set_time_weekday_not_found": {
+        "ru": "День недели не найден: {day}.",
+        "en": "Weekday not recognized: {day}."
+    },
+    "set_time_invalid_time": {
+        "ru": "Время не распознано: {time}.",
+        "en": "Time not recognized: {time}."
+    },
+    "set_time_save_failed": {
+        "ru": "Не удалось сохранить время.",
+        "en": "Failed to save the time."
+    },
+    "set_time_success": {
+        "ru": "Время установлено:\n{time}",
+        "en": "Time added:\n{time}"
+    },
+    "set_time_poll": {
+        "ru": "Согласен играть в это время",
+        "en": "I can play at this time"
+    },
+    "schedule_games": {
+        "ru": "{count} игр",
+        "en": "{count} games"
+    },
+    "remove_time_not_table_player": {
+        "ru": "Удалять время можно только за своим столом.",
+        "en": "You can only remove times for your own table."
+    },
+    "remove_time_failed": {
+        "ru": "Не удалось удалить время.",
+        "en": "Failed to remove the times."
+    },
+    "remove_time_success": {
+        "ru": "Время удалено.",
+        "en": "Scheduled times removed."
+    },
+    "timetable_empty": {
+        "ru": "Игр нет",
+        "en": "No games scheduled."
+    },
+    "judge_call_failed_link": {
+        "ru": "Ошибка генерации ссылки.",
+        "en": "Failed to generate an invite link."
+    },
+    "judge_call_success": {
+        "ru": "Вызвал админа за стол.",
+        "en": "An admin has been called to the table."
+    },
+    "judge_call_admin_message": {
+        "ru": "{player} вызывает админа за стол {table}\n{link}",
+        "en": "{player} called an admin to table {table}\n{link}"
+    },
+    "start_game_announcement": {
+        "ru": "Игра за столом {table} запущена:\n{players}",
+        "en": "The game at table {table} has started:\n{players}"
+    },
+    "start_game_done": {
+        "ru": "Приятной игры!",
+        "en": "Have a good game!"
+    },
+    "start_game_missing_players": {
+        "ru": "Игроки не в лобби: {players}, статус готовности обновлён.",
+        "en": "Players not in the lobby: {players}. Their ready status was reset."
+    },
+    "start_game_failed": {
+        "ru": "Не удалось запустить игру: {reason}",
+        "en": "Failed to start the game: {reason}"
+    },
+    "player_info_usage": {
+        "ru": "Использование: /player_info <telegram_name>",
+        "en": "Usage: /player_info <telegram_name>"
+    },
+    "player_not_found": {
+        "ru": "Пользователь не зарегистрирован.",
+        "en": "Player is not registered."
+    },
+    "player_info_admin_ids": {
+        "ru": "ID в базе: {player_id}\nTelegram ID: {telegram_id}\n",
+        "en": "Database ID: {player_id}\nTelegram ID: {telegram_id}\n"
+    },
+    "player_info_profile": {
+        "ru": "Telegram хэндл: @{telegram_name}\nTenhou ник: {tenhou_name}\nИмя: {name}\n\n",
+        "en": "Telegram handle: @{telegram_name}\nTenhou nickname: {tenhou_name}\nName: {name}\n\n"
+    },
+    "table_name": {
+        "ru": "Стол {table}",
+        "en": "Table {table}"
+    },
+    "table_played_games": {
+        "ru": "Сыграно: {played} из {total} игр\n",
+        "en": "Played: {played} of {total} games\n"
+    },
+    "table_times_heading": {
+        "ru": "Время:\n",
+        "en": "Scheduled times:\n"
+    },
+    "table_info_usage": {
+        "ru": "Использование: /table_info <table_id>",
+        "en": "Usage: /table_info <table_id>"
+    },
+    "table_not_found": {
+        "ru": "Стол не найден.",
+        "en": "Table not found."
+    },
+    "pantheon_no_events": {
+        "ru": "Активных событий нет",
+        "en": "There are no active events."
+    },
+    "set_chat_supergroup_only": {
+        "ru": "Доступно только в супергруппах. (В настройках группы включите историю чата для новых участников)",
+        "en": "This command is only available in supergroups. (Enable chat history for new members in the group settings.)"
+    },
+    "set_chat_too_large": {
+        "ru": "Слишком большой чат.",
+        "en": "This chat is too large."
+    },
+    "set_chat_bot_admin": {
+        "ru": "Сначала назначьте боту права администратора.",
+        "en": "Make the bot an administrator first."
+    },
+    "set_chat_already_assigned": {
+        "ru": "У этого чата уже есть стол {table}.",
+        "en": "This chat is already assigned to table {table}."
+    },
+    "set_chat_no_available_tables": {
+        "ru": "У вас нет нераскрытых столов.",
+        "en": "You have no unassigned tables."
+    },
+    "set_chat_choose_table": {
+        "ru": "Выберите стол",
+        "en": "Choose a table"
+    },
+    "set_chat_cancelled": {
+        "ru": "Отменено",
+        "en": "Cancelled"
+    },
+    "set_chat_selected": {
+        "ru": "Выбран стол {table}",
+        "en": "Selected table {table}"
+    },
+    "set_chat_invite_error": {
+        "ru": "Ошибка.",
+        "en": "An error occurred."
+    },
+    "set_chat_invite_player": {
+        "ru": "Чат стола {table}:\n{link}",
+        "en": "Table {table} chat:\n{link}"
+    },
+    "set_chat_invite_sent": {
+        "ru": "Ссылка отправлена игроку {player}.",
+        "en": "Invite link sent to {player}."
+    },
+    "set_chat_invite_failed": {
+        "ru": "Не удалось пригласить игрока {player}.",
+        "en": "Failed to invite player {player}."
+    },
+    "log_usage": {
+        "ru": "Использование: /log <ссылка>",
+        "en": "Usage: /log <link>"
+    },
+    "log_empty_link": {
+        "ru": "Ссылка не должна быть пустой.",
+        "en": "The link must not be empty."
+    },
+    "log_event_not_found": {
+        "ru": "Не удалось определить событие. Используйте команду в чате стола.",
+        "en": "Could not determine the event. Use this command in a table chat."
+    },
+    "log_success": {
+        "ru": "Лог отправлен в Пантеон.\nСсылка на игру: {link}",
+        "en": "Game log submitted to Pantheon.\nGame link: {link}"
+    },
+    "log_failed": {
+        "ru": "Не удалось отправить лог: {reason}",
+        "en": "Failed to submit the game log: {reason}"
+    },
+    "pantheon_players_without_ids": {
+        "ru": "Игроки без ID не найдены.",
+        "en": "No players without Pantheon IDs were found."
+    },
+    "pantheon_player_found": {
+        "ru": "Игрок {player} найден: ID {player_id}",
+        "en": "Player {player} found: ID {player_id}"
+    },
+    "pantheon_player_not_found": {
+        "ru": "Игрок {player} не найден",
+        "en": "Player {player} not found"
+    },
+    "leaderboard_failed": {
+        "ru": "Не удалось получить таблицу: {reason}",
+        "en": "Failed to retrieve the leaderboard: {reason}"
+    },
+    "set_chat_title": {
+        "ru": "Кава стол {table}",
+        "en": "Kawa table {table}"
+    },
+    "reminder_message": {
+        "ru": "Напоминание о назначенном времени:\n{time}",
+        "en": "Reminder of the scheduled time:\n{time}"
     }
 }

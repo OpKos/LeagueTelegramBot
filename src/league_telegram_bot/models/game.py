@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey
@@ -33,7 +34,7 @@ class Game(Base):
             for player in self.players()
         )
 
-    def info_string(self) -> str:
-        status = "🟢 Запущена" if self.started else "🔴 Не запущена"
+    def info_string(self, translate: Callable[..., str]) -> str:
+        status = translate("game_started") if self.started else translate("game_not_started")
         players = "\n".join(player.irl_name for player in self.players())
-        return f"ID игры: {self.game_id}\n{status}\n{players}\n\n"
+        return translate("game_info", game_id=self.game_id, status=status, players=players)

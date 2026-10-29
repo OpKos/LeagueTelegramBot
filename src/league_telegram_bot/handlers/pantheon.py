@@ -21,24 +21,23 @@ class PantheonHandlers:
         user = update.effective_user
         assert update.effective_message
         assert user
+        lang = self.language_for_user(user.id)
 
         if not context.args or len(context.args) != 1:
             log_command_event(update, "log", "rejected", logger=logger, reason="invalid_arguments")
-            await update.effective_message.reply_text("Использование: /log <ссылка>")
+            await update.effective_message.reply_text(self.tr(lang, "log_usage"))
             return
 
         link = context.args[0].strip()
         if not link:
             log_command_event(update, "log", "rejected", logger=logger, reason="empty_link")
-            await update.effective_message.reply_text("Ссылка не должна быть пустой.")
+            await update.effective_message.reply_text(self.tr(lang, "log_empty_link"))
             return
 
         event = _resolve_event(self, update.effective_message.chat_id)
         if event is None:
             log_command_event(update, "log", "rejected", logger=logger, reason="event_not_found")
-            await update.effective_message.reply_text(
-                "Не удалось определить событие. Используйте команду в чате стола."
-            )
+            await update.effective_message.reply_text(self.tr(lang, "log_event_not_found"))
             return
 
         api_url = os.getenv("PANTHEON_GAME_API_URL", "https://gameapi.riichimahjong.org")
@@ -53,19 +52,23 @@ class PantheonHandlers:
             game = result.get("game", {})
             session_hash = game.get("session_hash", "—")
             await update.effective_message.reply_text(
-                "Лог отправлен в Пантеон.\n"
-                f"Ссылка на игру: https://rating.riichimahjong.org/event/{event.pantheon_id}/game/{session_hash}"
+                self.tr(
+                    lang,
+                    "log_success",
+                    link=f"https://rating.riichimahjong.org/event/{event.pantheon_id}/game/{session_hash}",
+                )
             )
             log_command_event(update, "log", "succeeded", logger=logger, event_id=event.id)
             return
 
         error = result.get("meta", "неизвестная ошибка").get("cause", "неизвестная ошибка")
-        await update.effective_message.reply_text(f"Не удалось отправить лог: {error}")
+        await update.effective_message.reply_text(self.tr(lang, "log_failed", reason=error))
         log_command_event(update, "log", "failed", logger=logger, event_id=event.id, reason=error)
 
     @command_handler("fill_pantheon_ids")
     async def find_ids_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
+        lang = self.language_for_user(user.id)
         if not self.is_admin(user.id):
             log_command_event(
                 update, "fill_pantheon_ids", "rejected", logger=logger, reason="admin_only"
@@ -86,9 +89,16 @@ class PantheonHandlers:
             if result.get("people", ""):
                 pantheon_id = result.get("people")[0].get("id")
                 self.players.set_pantheon_id(player.p_id, pantheon_id)
-                output.append(f"Player {player.tenhou_name} found: id {pantheon_id}")
+                output.append(
+                    self.tr(
+                        lang,
+                        "pantheon_player_found",
+                        player=player.tenhou_name,
+                        player_id=pantheon_id,
+                    )
+                )
             else:
-                output.append(f"Player {player.tenhou_name} not found")
+                output.append(self.tr(lang, "pantheon_player_not_found", player=player.tenhou_name))
         if len(output) == 0:
             log_command_event(
                 update,
@@ -97,7 +107,7 @@ class PantheonHandlers:
                 logger=logger,
                 updated_players=0,
             )
-            await update.effective_message.reply_text("Игроки без id не найдены")
+            await update.effective_message.reply_text(self.tr(lang, "pantheon_players_without_ids"))
             return
         await update.effective_message.reply_text("\n".join(output))
         log_command_event(
@@ -111,6 +121,7 @@ class PantheonHandlers:
     @command_handler("leaderboard")
     async def leaderboard_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
+        lang = self.language_for_user(user.id)
         if not self.is_admin(user.id):
             log_command_event(update, "leaderboard", "rejected", logger=logger, reason="admin_only")
             await update.effective_message.reply_text("🔒 Admin only command")
@@ -135,7 +146,7 @@ class PantheonHandlers:
             log_command_event(update, "leaderboard", "succeeded", logger=logger, event_id=event.id)
             return
         error = result.get("error", "неизвестная ошибка")
-        await update.effective_message.reply_text(f"Не удалось получить таблицу: {error}")
+        await update.effective_message.reply_text(self.tr(lang, "leaderboard_failed", reason=error))
         log_command_event(
             update, "leaderboard", "failed", logger=logger, event_id=event.id, reason=error
         )

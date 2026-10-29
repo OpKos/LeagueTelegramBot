@@ -29,7 +29,9 @@ class RegistrationHandlers:
             log_command_event(
                 update, "register", "rejected", logger=logger, reason="invalid_arguments"
             )
-            await update.effective_message.reply_text(self.tr("en", "register_invalid_args"))
+            await update.effective_message.reply_text(
+                self.tr_for_user(user.id, "register_invalid_args")
+            )
             return
 
         tenhou_name = args[0]
@@ -60,9 +62,9 @@ class RegistrationHandlers:
             telegram_id=user.id, telegram_name=user.username, tenhou_id=tenhou_name
         )
         await update.effective_message.reply_text(
-            self.tr("ru", "register_success")
+            self.tr("ru", "register_welcome")
             + "\n"
-            + self.tr("en", "register_success")
+            + self.tr("en", "register_welcome")
             + "\nUse /set_language to change your language"
         )
         log_command_event(
@@ -77,7 +79,7 @@ class RegistrationHandlers:
             log_command_event(
                 update, "set_language", "rejected", logger=logger, reason="invalid_language"
             )
-            await update.message.reply_text("Usage: /set_language ru|en")
+            await update.message.reply_text(self.tr_for_user(user.id, "language_invalid_args"))
             return
 
         lang = context.args[0]

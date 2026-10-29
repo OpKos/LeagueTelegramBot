@@ -18,22 +18,24 @@ class ChatHandlers:
         chat = query.message.chat
         chat_id = chat.id
         data = query.data[2:]
+        lang = self.language_for_update(update)
         if data == "Cancel":
             await query.answer()
-            await query.edit_message_text(text="Отменено")
+            await query.edit_message_text(text=self.tr(lang, "cancelled"))
+            return
         table_name = data
         table = self.tables.get_table(table_name=table_name)
         self.tables.set_table_chat(table.table_id, chat_id)
         await query.answer()
-        await query.edit_message_text(text=f"Выбран стол {table_name}")
+        await query.edit_message_text(text=self.tr(lang, "set_chat_selected", table=table_name))
         try:
-            await chat.set_title(f"Кава стол {table_name}")
+            await chat.set_title(self.tr(lang, "set_chat_title", table=table_name))
         except Exception as e:
             logger.error(e)
         try:
             link = await context.bot.create_chat_invite_link(chat_id=chat_id)
         except Exception as e:
-            await chat.send_message("Ошибка.")
+            await chat.send_message(self.tr(lang, "set_chat_invite_error"))
             logger.error(e)
             return
         for player in table.players():
@@ -43,22 +45,30 @@ class ChatHandlers:
                 try:
                     await context.bot.send_message(
                         chat_id=player.telegram_id,
-                        text=f"Чат стола {table_name}:\n{link.invite_link}",
+                        text=self.tr_for_user(
+                            player.telegram_id,
+                            "set_chat_invite_player",
+                            table=table_name,
+                            link=link.invite_link,
+                        ),
                     )
-                    await chat.send_message(f"Ссылка отправлена {player.irl_name}.")
+                    await chat.send_message(
+                        self.tr(lang, "set_chat_invite_sent", player=player.irl_name)
+                    )
                 except Exception as e:
-                    await chat.send_message(f"Не удалось пригласить игрока {player.irl_name}.")
+                    await chat.send_message(
+                        self.tr(lang, "set_chat_invite_failed", player=player.irl_name)
+                    )
                     logger.error(e)
 
     @command_handler("set_chat")
     async def set_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        lang = self.language_for_update(update)
         if update.effective_message.chat.type != "supergroup":
             log_command_event(
                 update, "set_chat", "rejected", logger=logger, reason="supergroup_required"
             )
-            await update.effective_message.reply_text(
-                "Доступно только в супергруппах. (В настройках группы включите историю чата для новых участников)"
-            )
+            await update.effective_message.reply_text(self.tr(lang, "set_chat_supergroup_only"))
             return
         count = await update.effective_message.chat.get_member_count()
         if count > 15:
@@ -70,14 +80,12 @@ class ChatHandlers:
                 reason="chat_too_large",
                 member_count=count,
             )
-            await update.effective_message.reply_text("Слишком большой чат.")
+            await update.effective_message.reply_text(self.tr(lang, "set_chat_too_large"))
             return
         member = await update.effective_message.chat.get_member(context.bot.id)
         if member.status != "administrator":
             log_command_event(update, "set_chat", "rejected", logger=logger, reason="bot_not_admin")
-            await update.effective_message.reply_text(
-                "Сначала назначьте боту права администратора."
-            )
+            await update.effective_message.reply_text(self.tr(lang, "set_chat_bot_admin"))
             return
         user = update.effective_user
         t = self.tables.get_table(chat_id=update.effective_message.chat.id)
@@ -85,27 +93,31 @@ class ChatHandlers:
             log_command_event(
                 update, "set_chat", "rejected", logger=logger, reason="table_already_assigned"
             )
-            await update.effective_message.reply_text(f"У этого чата уже есть стол {t.name}.")
+            await update.effective_message.reply_text(
+                self.tr(lang, "set_chat_already_assigned", table=t.name)
+            )
             return
         player = self.players.get_player(telegram_id=user.id)
         if not player:
             log_command_event(
                 update, "set_chat", "rejected", logger=logger, reason="not_registered"
             )
-            await update.effective_message.reply_text("Вы не зарегистрированы.")
+            await update.effective_message.reply_text(self.tr(lang, "not_registered"))
             return
         table_names = [table.name for table in player.all_tables() if table.chat_id == 0]
         if not table_names:
             log_command_event(
                 update, "set_chat", "rejected", logger=logger, reason="no_available_tables"
             )
-            await update.effective_message.reply_text("У вас нет нераскрытых столов.")
+            await update.effective_message.reply_text(self.tr(lang, "set_chat_no_available_tables"))
             return
         keyboard = [
             [InlineKeyboardButton(t_n, callback_data="TC" + t_n)] for t_n in table_names
-        ] + [[InlineKeyboardButton("Отмена", callback_data="TCCancel")]]
+        ] + [[InlineKeyboardButton(self.tr(lang, "cancel_button"), callback_data="TCCancel")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("Выберите стол", reply_markup=reply_markup)
+        await update.message.reply_text(
+            self.tr(lang, "set_chat_choose_table"), reply_markup=reply_markup
+        )
         log_command_event(
             update,
             "set_chat",

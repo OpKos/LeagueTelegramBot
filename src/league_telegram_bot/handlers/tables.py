@@ -11,11 +11,36 @@ from telegram.ext import ContextTypes
 from .. import models
 from ..time_utils import datetime_to_timestamp, now_in_timezone
 from .decorators import callback_query_handler, command_handler
-from .utils import log_command_event, table_time_string
+from .utils import game_amount_string, log_command_event, table_time_string
 
 logger = logging.getLogger(__name__)
 
-WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
+WEEKDAYS = {
+    "пн": 0,
+    "вт": 1,
+    "ср": 2,
+    "чт": 3,
+    "пт": 4,
+    "сб": 5,
+    "вс": 6,
+    "mon": 0,
+    "monday": 0,
+    "tue": 1,
+    "tues": 1,
+    "tuesday": 1,
+    "wed": 2,
+    "wednesday": 2,
+    "thu": 3,
+    "thur": 3,
+    "thurs": 3,
+    "thursday": 3,
+    "fri": 4,
+    "friday": 4,
+    "sat": 5,
+    "saturday": 5,
+    "sun": 6,
+    "sunday": 6,
+}
 
 
 @dataclass(frozen=True)
@@ -26,9 +51,10 @@ class ParsedTableTime:
 
 
 class TableTimeInputError(ValueError):
-    def __init__(self, reason: str, message: str):
+    def __init__(self, reason: str, message: str, **params: str):
         super().__init__(message)
         self.reason = reason
+        self.params = params
 
 
 def parse_table_time(
@@ -51,7 +77,7 @@ def parse_table_time(
 
     time_digits = "".join(ch for ch in time_arg if ch.isdigit())
     if not time_digits:
-        raise TableTimeInputError("invalid_time", f"Время не распознано {time_arg}")
+        raise TableTimeInputError("invalid_time", f"Время не распознано {time_arg}", time=time_arg)
     if len(time_digits) < 3:
         hour = int(time_digits)
         minute = 0
@@ -69,10 +95,14 @@ def parse_table_time(
                 month = 1
                 year += 1
     else:
-        weekday_name = day_arg.lower()
+        weekday_name = day_arg.lower().rstrip(".")
         if weekday_name not in WEEKDAYS:
-            raise TableTimeInputError("weekday_not_found", f"День недели не найден {weekday_name}.")
-        weekday = WEEKDAYS.index(weekday_name)
+            raise TableTimeInputError(
+                "weekday_not_found",
+                f"День недели не найден {weekday_name}.",
+                day=weekday_name,
+            )
+        weekday = WEEKDAYS[weekday_name]
         shift = (weekday - now.weekday()) % 7
         prospective_date = now + datetime.timedelta(days=shift)
         day = prospective_date.day
@@ -88,6 +118,7 @@ def parse_table_time(
         raise TableTimeInputError(
             "invalid_time",
             f"Время не распознано {year}.{month}.{day} {hour}:{minute}",
+            time=f"{year}.{month}.{day} {hour}:{minute}",
         ) from error
 
     return ParsedTableTime(
@@ -115,16 +146,14 @@ class TableHandlers:
             log_command_event(
                 update, "start_table", "rejected", logger=logger, reason="chat_has_no_table"
             )
-            await update.effective_message.reply_text(
-                "У чата не указан стол, используйте /set_chat"
-            )
+            await update.effective_message.reply_text(self.tr("ru", "no_table_in_chat"))
             return
 
         if not table.unfinished_games():
             log_command_event(
                 update, "start_table", "rejected", logger=logger, reason="no_unfinished_games"
             )
-            await update.effective_message.reply_text(text="Все игры за столом сыграны")
+            await update.effective_message.reply_text(text=self.tr("ru", "no_unfinished_games"))
             return
 
         msg = self.games.get_table_ready_string(table_id=table.table_id)
@@ -141,7 +170,7 @@ class TableHandlers:
         await query.answer()
         log_command_event(update, "ready_button", "started", logger=logger, action=data)
         if data == "Cancel":
-            await query.edit_message_text(text="Отменено")
+            await query.edit_message_text(text=self.tr("ru", "cancelled"))
             log_command_event(update, "ready_button", "rejected", logger=logger, reason="cancelled")
             return
         user = update.effective_user
@@ -163,7 +192,7 @@ class TableHandlers:
             )
             return
         if not table.unfinished_games():
-            await query.edit_message_text(text="Все игры за столом сыграны")
+            await query.edit_message_text(text=self.tr("ru", "no_unfinished_games"))
             log_command_event(
                 update, "ready_button", "rejected", logger=logger, reason="no_unfinished_games"
             )
@@ -224,12 +253,20 @@ class TableHandlers:
             try:
                 self.games.set_game_status(game.game_id, 1)
                 seat_winds_names = ["東", "南", "西", "北"]
-                text = f"Игра за столом {game.table.name} запущена:"
+                players_text = []
                 for index, player in enumerate(game.players()):
-                    text += f"\n{seat_winds_names[index]} {player.irl_name} ({player.tenhou_name})"
+                    players_text.append(
+                        f"{seat_winds_names[index]} {player.irl_name} ({player.tenhou_name})"
+                    )
                     self.ready.set_player_unready(player.p_id)
+                text = self.tr(
+                    "ru",
+                    "start_game_announcement",
+                    table=game.table.name,
+                    players="\n".join(players_text),
+                )
                 await context.bot.send_message(chat_id=self.chat, text=text)
-                await update.callback_query.edit_message_text(text="Приятной игры!")
+                await update.callback_query.edit_message_text(text=self.tr("ru", "start_game_done"))
             except Exception:
                 log_command_event(
                     update,
@@ -273,11 +310,15 @@ class TableHandlers:
                     text=msg, reply_markup=self._ready_button_reply_markup
                 )
                 await update.callback_query.message.chat.send_message(
-                    text=f"Игроки не в лобби: {', '.join(missed_players)}, статус готовности обновлён."
+                    text=self.tr(
+                        "ru",
+                        "start_game_missing_players",
+                        players=", ".join(missed_players),
+                    )
                 )
             else:
                 await update.callback_query.message.chat.send_message(
-                    text=f"Не удалось запустить игру: {result}"
+                    text=self.tr("ru", "start_game_failed", reason=result)
                 )
         except Exception:
             log_command_event(
@@ -311,26 +352,20 @@ class TableHandlers:
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="chat_has_no_table"
             )
-            await update.effective_message.reply_text(
-                "У чата не указан стол, используйте /set_chat"
-            )
+            await update.effective_message.reply_text(self.tr("ru", "no_table_in_chat"))
             return
 
         if not context.args or len(context.args) != 3:
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="invalid_arguments"
             )
-            await update.effective_message.reply_text(
-                "Использование: /set_time <день> <время> <число игр>\n"
-                "День вводить без месяца, только само число. Можно вводить день недели двумя буквами.\n"
-                "Время можно указывать как с минутами, так и без. При указании с минутами, разделитель не обязателен.\n"
-                "Пример: 17:00 вторник, 2 ханчана - /set_time вт 17 2\n"
-                "Пример: 17:15 25 числа, 4 ханчана - /set_time 25 1715 4"
-            )
+            await update.effective_message.reply_text(self.tr("ru", "set_time_usage"))
             return
 
         if not table.unfinished_games():
-            await update.effective_message.reply_text(f"Нет неначатых игр за столом {table.name}.")
+            await update.effective_message.reply_text(
+                self.tr("ru", "set_time_no_games", table=table.name)
+            )
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="no_unstarted_games"
             )
@@ -343,9 +378,7 @@ class TableHandlers:
             return
         player = self.players.get_player(telegram_id=user.id)
         if player is None or player not in table.players():
-            await update.effective_message.reply_text(
-                "Указывать время можно только за своим столом."
-            )
+            await update.effective_message.reply_text(self.tr("ru", "set_time_not_table_player"))
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="not_table_player"
             )
@@ -362,7 +395,9 @@ class TableHandlers:
             )
             validate_scheduled_game_count(table, scheduled_time.games)
         except TableTimeInputError as error:
-            await update.effective_message.reply_text(str(error))
+            await update.effective_message.reply_text(
+                self.tr("ru", f"set_time_{error.reason}", **error.params)
+            )
             log_command_event(update, "set_time", "rejected", logger=logger, reason=error.reason)
             return
 
@@ -375,13 +410,18 @@ class TableHandlers:
             reminder_cutoff=cutoff,
         ):
             log_command_event(update, "set_time", "failed", logger=logger, reason="table_not_found")
-            await update.effective_message.reply_text("Не удалось сохранить время.")
+            await update.effective_message.reply_text(self.tr("ru", "set_time_save_failed"))
             return
-        await update.effective_message.reply_text(f"Время установлено: \n{scheduled_time.display}")
+        local_time = datetime.datetime.fromtimestamp(scheduled_time.timestamp, tz=now.tzinfo)
+        display = (
+            f"{local_time.strftime('%d.%m %H:%M')} "
+            f"({game_amount_string(scheduled_time.games, 'ru', self.translate('ru'))})"
+        )
+        await update.effective_message.reply_text(self.tr("ru", "set_time_success", time=display))
         log_command_event(update, "set_time", "succeeded", logger=logger, table_id=table.table_id)
         await update.effective_message.chat.send_poll(
             question=scheduled_time.display,
-            options=["Согласен играть в это время"],
+            options=[self.tr("ru", "set_time_poll")],
             allows_revoting=False,
             is_anonymous=False,
         )
@@ -395,14 +435,12 @@ class TableHandlers:
             log_command_event(
                 update, "remove_time", "rejected", logger=logger, reason="chat_has_no_table"
             )
-            await update.effective_message.reply_text(
-                "У чата не указан стол, используйте /set_chat"
-            )
+            await update.effective_message.reply_text(self.tr("ru", "no_table_in_chat"))
             return
 
         player = self.players.get_player(telegram_id=user.id)
         if player not in table.players() and not self.is_admin(user.id):
-            await update.effective_message.reply_text("Удалять время можно только за своим столом.")
+            await update.effective_message.reply_text(self.tr("ru", "remove_time_not_table_player"))
             log_command_event(
                 update, "remove_time", "rejected", logger=logger, reason="not_table_player"
             )
@@ -411,37 +449,44 @@ class TableHandlers:
             log_command_event(
                 update, "remove_time", "failed", logger=logger, reason="table_not_found"
             )
-            await update.effective_message.reply_text("Не удалось удалить время.")
+            await update.effective_message.reply_text(self.tr("ru", "remove_time_failed"))
             return
         log_command_event(
             update, "remove_time", "succeeded", logger=logger, table_id=table.table_id
         )
-        await update.effective_message.reply_text("Время удалено.")
+        await update.effective_message.reply_text(self.tr("ru", "remove_time_success"))
 
     @command_handler("timetable")
     async def timetable_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         assert user
         assert update.effective_message
+        lang = self.language_for_user(user.id)
 
         if update.effective_message.chat.type != "private":
             log_command_event(
                 update, "timetable", "rejected", logger=logger, reason="private_chat_required"
             )
-            await update.effective_message.reply_text(
-                "Эта команда доступна только в личных сообщениях с ботом."
-            )
+            await update.effective_message.reply_text(self.tr(lang, "private_chat_required"))
             return
 
         now = now_in_timezone(self.timezone)
         cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
         known_times = self.tables.get_all_relevant_table_times(left_cutoff=cutoff)
         known_str = "".join(
-            table_time_string(i, explicit=True, timezone=self.timezone) for i in known_times
+            table_time_string(
+                i,
+                explicit=True,
+                timezone=self.timezone,
+                lang=lang,
+                translate=self.translate(lang),
+                weekday_names=tuple(self.weekday_names(lang)),
+            )
+            for i in known_times
         )
         ans = known_str
         if ans == "":
-            ans = "Игр нет"
+            ans = self.tr(lang, "timetable_empty")
         await update.effective_message.reply_text(ans, parse_mode=ParseMode.HTML)
         log_command_event(
             update, "timetable", "succeeded", logger=logger, table_count=len(known_times)
@@ -456,9 +501,7 @@ class TableHandlers:
             log_command_event(
                 update, "judge_call", "rejected", logger=logger, reason="chat_has_no_table"
             )
-            await update.effective_message.reply_text(
-                "У чата не указан стол, используйте /set_chat"
-            )
+            await update.effective_message.reply_text(self.tr("ru", "no_table_in_chat"))
             return
 
         player = self.players.get_player(telegram_id=user.id)
@@ -466,13 +509,13 @@ class TableHandlers:
             log_command_event(
                 update, "judge_call", "rejected", logger=logger, reason="not_registered"
             )
-            await update.effective_message.reply_text("Вы не зарегистрированы в системе")
+            await update.effective_message.reply_text(self.tr("ru", "not_registered_system"))
             return
 
         try:
             link = await context.bot.create_chat_invite_link(chat_id=table.chat_id)
         except Exception:
-            await update.effective_message.reply_text("Ошибка генерации ссылки")
+            await update.effective_message.reply_text(self.tr("ru", "judge_call_failed_link"))
             log_command_event(
                 update,
                 "judge_call",
@@ -483,10 +526,19 @@ class TableHandlers:
             )
             return
         admin_list = self.players.get_admins()
-        msg = [f"{player.irl_name} вызывает админа за стол {table.name}\n{link.invite_link}\n"]
+        msg = [
+            self.tr(
+                "ru",
+                "judge_call_admin_message",
+                player=player.irl_name,
+                table=table.name,
+                link=link.invite_link,
+            )
+            + "\n"
+        ]
         for admin in admin_list:
             msg.append(admin.dirty_mention() + " ")
         msg = "".join(msg)
         await context.bot.send_message(chat_id=self.admin_chat, text=msg)
-        await update.effective_message.reply_text("Вызвал админа за стол")
+        await update.effective_message.reply_text(self.tr("ru", "judge_call_success"))
         log_command_event(update, "judge_call", "succeeded", logger=logger, table_id=table.table_id)

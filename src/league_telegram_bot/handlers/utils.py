@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -58,36 +59,44 @@ ready_button_reply_markup = InlineKeyboardMarkup(
 def table_time_string(
     table_time: TableTime,
     timezone: str,
+    lang: str,
+    translate: Callable[..., str],
+    weekday_names: tuple[str, ...],
     mention: bool = False,
     explicit: bool = True,
 ) -> str:
     table = table_time.table
-    ans = (
-        timestring_from_timestamp(
-            table_time.time, weekday=explicit, day=explicit, timezone=timezone
-        )
-        + " - "
-        + f"Стол {table.name} (ханчанов: {table_time.games}):\n"
+    timestamp = timestring_from_timestamp(
+        table_time.time,
+        timezone=timezone,
+        weekday=explicit,
+        day=explicit,
+        weekday_names=weekday_names,
     )
-    for i, player in enumerate(table.players()):
-        if mention:
-            ans += player.clean_mention()
-        else:
-            ans += player.irl_name
-        if i % 2 == 0:
-            ans += ", "
-        elif i < len(table.players()) - 1:
-            ans += ",\n"
-        else:
-            ans += ".\n\n"
-    return ans
+    player_list = []
+    for player in table.players():
+        player_list.append(player.clean_mention() if mention else player.irl_name)
+    amount = game_amount_string(table_time.games, lang, translate)
+    return translate(
+        "table_time_string",
+        time=timestamp,
+        table=table.name,
+        games=amount,
+        players=",\n".join(player_list),
+    )
 
 
-def game_amount_string(games: int):
-    forms = ["ханчан", "ханчана", "ханчанов"]
-    if games % 10 == 1:
-        return f"{games} {forms[0]}"
-    elif 4 >= games % 10 >= 2:
-        return f"{games} {forms[1]}"
+def game_amount_string(games: int, lang: str, translate: Callable[..., str]) -> str:
+    if lang == "en":
+        key = "game_amount_one_en" if games == 1 else "game_amount_many_en"
+        return translate(key, count=games)
+    remainder_100 = games % 100
+    if 11 <= remainder_100 <= 14:
+        form = "many"
+    elif games % 10 == 1:
+        form = "one"
+    elif 2 <= games % 10 <= 4:
+        form = "few"
     else:
-        return f"{games} {forms[2]}"
+        form = "many"
+    return translate(f"games_amount_ru_{form}", count=games)

@@ -6,7 +6,7 @@ import sqlalchemy
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from ..time_utils import timestring_from_timestamp
+from ..time_utils import RUSSIAN_WEEKDAYS, timestring_from_timestamp
 from .base import Base
 
 if TYPE_CHECKING:
@@ -73,8 +73,16 @@ class Table(Base):
         timezone: str,
         left_cutoff: int | None = None,
         right_cutoff: int | None = None,
+        weekday_names: tuple[str, ...] | None = None,
     ) -> str:
+        weekday_names = weekday_names or RUSSIAN_WEEKDAYS
         return "\n".join(
-            timestring_from_timestamp(time, weekday=True, day=True, timezone=timezone)
+            timestring_from_timestamp(
+                time,
+                timezone=timezone,
+                weekday=True,
+                day=True,
+                weekday_names=weekday_names,
+            )
             for time in self.get_relevant_times(left_cutoff=left_cutoff, right_cutoff=right_cutoff)
         )
