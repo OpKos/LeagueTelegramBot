@@ -106,6 +106,62 @@ def test_ready_and_game_status(services) -> None:
     assert games.check_game_ready(game.game_id) is False
 
 
+def test_game_and_table_presentation_methods(services) -> None:
+    manager, players, tables, _events, ready, games = services
+    event = models.Event(name="Event", started=1)
+    manager.session.add(event)
+    manager.session.commit()
+
+    created = _create_players(players)
+    for index, player in enumerate(created):
+        players.fill_player_data(player.p_id, f"Player {index}")
+    table = tables.create_table_with_players(event.event_id, "T1", created)
+    manager.session.commit()
+    games.create_game_with_players(table.table_id, created)
+
+    game = manager.session.query(models.Game).first()
+    assert game is not None
+    table = manager.session.get(models.Table, table.table_id)
+    assert table is not None
+
+    assert table.players_string() == "Player 0\nPlayer 1\nPlayer 2\nPlayer 3"
+    assert table.players_string(mention=True) == "\n".join(
+        f"Player {index} (@user{index})" for index in range(4)
+    )
+    assert table.ready_string(set()) == "\n".join(f"❌ Player {index}" for index in range(4))
+    assert game.ready_string({created[0].p_id}) == "\n".join(
+        ["✅ Player 0", "❌ Player 1", "❌ Player 2", "❌ Player 3"]
+    )
+    assert game.are_players_ready({player.p_id for player in created}) is True
+    assert game.info_string() == (
+        f"ID игры: {game.game_id}\n🔴 Не запущена\nPlayer 0\nPlayer 1\nPlayer 2\nPlayer 3\n\n"
+    )
+
+
+def test_table_relevant_time_string(services) -> None:
+    manager, players, tables, _events, _ready, _games = services
+    event = models.Event(name="Event", started=1)
+    manager.session.add(event)
+    manager.session.commit()
+
+    created = _create_players(players)
+    table = tables.create_table_with_players(event.event_id, "T1", created)
+    manager.session.add(
+        models.TableTime(
+            table_id=table.table_id,
+            time=1767357000,
+            games=1,
+            need_reminder=0,
+        )
+    )
+    manager.session.commit()
+    table = manager.session.get(models.Table, table.table_id)
+    assert table is not None
+
+    assert table.get_relevant_times_string("Asia/Tokyo") == "Пятница 02.01 21:30"
+    assert table.get_relevant_times_string("Asia/Tokyo", left_cutoff=1767357001) == ""
+
+
 def test_player_tables_include_all_started_event_tables(services) -> None:
     manager, players, tables, _events, _ready, _games = services
     started_event = models.Event(name="Started", started=1)

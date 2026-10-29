@@ -56,22 +56,31 @@ class GameService:
 
     def get_game_string(self, game_id: int):
         game = self._session_provider.session.get(models.Game, game_id)
-        ans = []
-        for player in game.players():
-            res = "✅ " if self._ready_service.check_player_ready(player.p_id) else "❌ "
-            res += player.irl_name
-            ans.append(res)
-        return "\n".join(ans)
+        assert game is not None
+        ready_player_ids = {
+            player.p_id
+            for player in game.players()
+            if self._ready_service.check_player_ready(player.p_id)
+        }
+        return game.ready_string(ready_player_ids)
 
     def get_table_ready_string(self, table_id: int):
         table = self._session_provider.session.get(models.Table, table_id)
-        ans = []
-        for player in table.get_unfinished_players():
-            res = "✅ " if self._ready_service.check_player_ready(player.p_id) else "❌ "
-            res += player.irl_name
-            ans.append(res)
-        return "\n".join(ans)
+        assert table is not None
+        ready_player_ids = {
+            player.p_id
+            for player in table.get_unfinished_players()
+            if self._ready_service.check_player_ready(player.p_id)
+        }
+        return table.ready_string(ready_player_ids)
 
     def check_game_ready(self, game_id: int):
         game = self._session_provider.session.get(models.Game, game_id)
-        return all(self._ready_service.check_player_ready(player.p_id) for player in game.players())
+        assert game is not None
+        return game.are_players_ready(
+            {
+                player.p_id
+                for player in game.players()
+                if self._ready_service.check_player_ready(player.p_id)
+            }
+        )

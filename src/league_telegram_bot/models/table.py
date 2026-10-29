@@ -6,6 +6,7 @@ import sqlalchemy
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from ..time_utils import timestring_from_timestamp
 from .base import Base
 
 if TYPE_CHECKING:
@@ -46,6 +47,18 @@ class Table(Base):
                     players.append(player)
         return players
 
+    def players_string(self, mention: bool = False) -> str:
+        return "\n".join(
+            f"{player.irl_name} ({player.dirty_mention()})" if mention else player.irl_name
+            for player in self.players()
+        )
+
+    def ready_string(self, ready_player_ids: set[int]) -> str:
+        return "\n".join(
+            ("✅ " if player.p_id in ready_player_ids else "❌ ") + player.irl_name
+            for player in self.get_unfinished_players()
+        )
+
     def get_relevant_times(self, left_cutoff=None, right_cutoff=None) -> list[int]:
         relevant_times = [t_t.time for t_t in self.table_times]
         relevant_times.sort()
@@ -54,3 +67,14 @@ class Table(Base):
         if right_cutoff:
             relevant_times = [el for el in relevant_times if el <= right_cutoff]
         return relevant_times
+
+    def get_relevant_times_string(
+        self,
+        timezone: str,
+        left_cutoff: int | None = None,
+        right_cutoff: int | None = None,
+    ) -> str:
+        return "\n".join(
+            timestring_from_timestamp(time, weekday=True, day=True, timezone=timezone)
+            for time in self.get_relevant_times(left_cutoff=left_cutoff, right_cutoff=right_cutoff)
+        )

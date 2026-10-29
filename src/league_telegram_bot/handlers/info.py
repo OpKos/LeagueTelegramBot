@@ -7,7 +7,7 @@ from telegram import LinkPreviewOptions, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from ..time_utils import now_in_timezone, timestring_from_timestamp
+from ..time_utils import now_in_timezone
 from .decorators import command_handler
 from .utils import log_command_event
 
@@ -75,15 +75,10 @@ class InfoHandlers:
 
         for table in tables:
             message += f"Стол {table.name}\n"
-            for i in table.players():
-                message += f"{i.irl_name} ({i.dirty_mention()})\n"
+            message += table.players_string(mention=True) + "\n"
             if table.unfinished_games and table.get_relevant_times(left_cutoff=cutoff):
                 message += "Время:\n"
-                times = [
-                    timestring_from_timestamp(time, weekday=True, day=True, timezone=self.timezone)
-                    for time in table.get_relevant_times(left_cutoff=cutoff)
-                ]
-                message += "\n".join(times) + "\n"
+                message += table.get_relevant_times_string(self.timezone, left_cutoff=cutoff) + "\n"
             message += f"Сыграно: {len(table.games) - len(table.unfinished_games())} из {len(table.games)} игр\n\n"
 
         await update.effective_message.reply_text(message)
@@ -125,8 +120,7 @@ class InfoHandlers:
             await update.effective_message.reply_text("Стол не найден.")
             return
         message = f"Стол {table.table_id}\n"
-        for i in table.players():
-            message += f"{i.irl_name} ({i.dirty_mention()})\n"
+        message += table.players_string(mention=True) + "\n"
         message += f"Сыграно: {len(table.games) - len(table.unfinished_games())} из {len(table.games)} игр\n"
 
         now = now_in_timezone(self.timezone)
@@ -134,21 +128,11 @@ class InfoHandlers:
 
         if table.unfinished_games() and table.get_relevant_times(left_cutoff=cutoff):
             message += "Время:\n"
-            times = [
-                timestring_from_timestamp(time, weekday=True, day=True, timezone=self.timezone)
-                for time in table.get_relevant_times(left_cutoff=cutoff)
-            ]
-            message += "\n".join(times)
+            message += table.get_relevant_times_string(self.timezone, left_cutoff=cutoff)
         message += "\n\n"
 
-        games = table.games
-        for game in games:
-            message += (
-                f"ID игры: {game.game_id}\n{'🟢 Запущена' if game.started else '🔴 Не запущена'}\n"
-            )
-            for player in game.players():
-                message += f"{player.irl_name}\n"
-            message += "\n"
+        for game in table.games:
+            message += game.info_string()
 
         await update.effective_message.reply_text(message)
         log_command_event(update, "table_info", "succeeded", logger=logger, table_id=table.table_id)

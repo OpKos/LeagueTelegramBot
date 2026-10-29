@@ -23,3 +23,17 @@ class Game(Base):
     def players(self):
         self.players_seats.sort(key=lambda p: p.seat)
         return [p.player for p in self.players_seats]
+
+    def are_players_ready(self, ready_player_ids: set[int]) -> bool:
+        return all(player.p_id in ready_player_ids for player in self.players())
+
+    def ready_string(self, ready_player_ids: set[int]) -> str:
+        return "\n".join(
+            ("✅ " if player.p_id in ready_player_ids else "❌ ") + player.irl_name
+            for player in self.players()
+        )
+
+    def info_string(self) -> str:
+        status = "🟢 Запущена" if self.started else "🔴 Не запущена"
+        players = "\n".join(player.irl_name for player in self.players())
+        return f"ID игры: {self.game_id}\n{status}\n{players}\n\n"
