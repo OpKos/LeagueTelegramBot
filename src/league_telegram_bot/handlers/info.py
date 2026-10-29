@@ -59,7 +59,7 @@ class InfoHandlers:
 
         message = ""
         if self.is_admin(user.id):
-            message += f"ID в базе: {player.p_id}\n" f"Telegram ID: {player.telegram_id}\n"
+            message += f"ID в базе: {player.p_id}\nTelegram ID: {player.telegram_id}\n"
 
         message += (
             f"Telegram хэндл: @{player.telegram_name}\n"
@@ -70,7 +70,7 @@ class InfoHandlers:
         now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
         cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
 
-        tables = player.visible_tables()
+        tables = player.all_tables()
         tables.sort(key=lambda el: el.deadline_group)
 
         for table in tables:
@@ -86,9 +86,6 @@ class InfoHandlers:
                 message += "\n".join(times) + "\n"
             message += f"Сыграно: {len(table.games) - len(table.unfinished_games())} из {len(table.games)} игр\n\n"
 
-        if player.invisible_tables() and self.is_admin(user.id):
-            ids = [i.name for i in player.invisible_tables()]
-            message += f"Скрытые столы: {ids}\n\n"
         await update.effective_message.reply_text(message)
         log_command_event(update, "player_info", "succeeded", logger=logger, player_id=player.p_id)
 
@@ -127,14 +124,7 @@ class InfoHandlers:
             )
             await update.effective_message.reply_text("Стол не найден.")
             return
-        if not table.visible and not self.is_admin(user.id):
-            log_command_event(
-                update, "table_info", "rejected", logger=logger, reason="table_hidden"
-            )
-            await update.effective_message.reply_text("Стол скрыт.")
-            return
-
-        message = f"Стол {table.table_id}\n" f"{'Стол скрыт 🔒' if not table.visible else ''}\n"
+        message = f"Стол {table.table_id}\n"
         for i in table.players():
             message += f"{i.irl_name} ({i.dirty_mention()})\n"
         message += f"Сыграно: {len(table.games) - len(table.unfinished_games())} из {len(table.games)} игр\n"
@@ -154,8 +144,7 @@ class InfoHandlers:
         games = table.games
         for game in games:
             message += (
-                f"ID игры: {game.game_id}\n"
-                f"{'🟢 Запущена' if game.started else '🔴 Не запущена'}\n"
+                f"ID игры: {game.game_id}\n{'🟢 Запущена' if game.started else '🔴 Не запущена'}\n"
             )
             for player in game.players():
                 message += f"{player.irl_name}\n"

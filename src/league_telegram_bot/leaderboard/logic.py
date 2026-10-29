@@ -41,7 +41,7 @@ def get_leaderboard_image(event: models.Event, pantheon_data: list) -> str:
                 finished_games += 1
     now = datetime.datetime.now(tz=pytz.timezone("Europe/Moscow"))
     filename = f"leaderboard{event.name}{now.timestamp()}.png"
-    time_and_played_str = f"{now.strftime("%d.%m.%y")}, {finished_games}/{total_games} игр"
+    time_and_played_str = f"{now.strftime('%d.%m.%y')}, {finished_games}/{total_games} игр"
     specs = json.loads(event.leaderboard_specs)
     new_specs = dict()
     for k, v in specs.items():

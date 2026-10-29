@@ -73,7 +73,7 @@ async def send_daily_chat_message(context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.info(f"Создана таблица {image_link} для события {event.event_id}")
         else:
             logger.info(
-                f"Для события {event.event_id} ошибка {result.get("error", "неизвестная ошибка")}"
+                f"Для события {event.event_id} ошибка {result.get('error', 'неизвестная ошибка')}"
             )
 
     if len(image_links) == 1:

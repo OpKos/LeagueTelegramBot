@@ -94,7 +94,7 @@ class ChatHandlers:
             )
             await update.effective_message.reply_text("Вы не зарегистрированы.")
             return
-        table_names = [table.name for table in player.visible_tables() if table.chat_id == 0]
+        table_names = [table.name for table in player.all_tables() if table.chat_id == 0]
         if not table_names:
             log_command_event(
                 update, "set_chat", "rejected", logger=logger, reason="no_available_tables"

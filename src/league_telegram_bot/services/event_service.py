@@ -32,8 +32,6 @@ class EventService:
         ).delete()
         self._session_provider.session.commit()
 
-    def add_event_player(self, event_id: int, player_id: int, table_minimum: int = 0):
-        self._session_provider.session.add(
-            models.EventPlayer(event_id=event_id, p_id=player_id, table_minimum=table_minimum)
-        )
+    def add_event_player(self, event_id: int, player_id: int):
+        self._session_provider.session.add(models.EventPlayer(event_id=event_id, p_id=player_id))
         self._session_provider.session.commit()
