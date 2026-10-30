@@ -16,6 +16,7 @@ from .base import Base
 if TYPE_CHECKING:
     from .event import Event
     from .game import Game
+    from .player import Player
     from .table_time import TableTime
 
 
@@ -35,6 +36,14 @@ class Table(Base):
     def unfinished_games(self):
         self.games.sort(key=lambda game: game.game_id)
         return [g for g in self.games if g.started == 0]
+
+    def game_counts(self, player: Player | None = None) -> tuple[int, int]:
+        games = [
+            game
+            for game in self.games
+            if player is None or any(seat.p_id == player.p_id for seat in game.players_seats)
+        ]
+        return sum(game.started != 0 for game in games), len(games)
 
     def get_all_players(self):
         players = []

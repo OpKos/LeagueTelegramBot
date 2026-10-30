@@ -81,6 +81,34 @@ def test_table_and_game_creation(services) -> None:
     assert len(game.players()) == 4
 
 
+def test_table_game_counts_can_be_filtered_by_player(services) -> None:
+    manager, players, tables, _events, _ready, games = services
+    event = models.Event(name="Event", started=1)
+    manager.session.add(event)
+    manager.session.commit()
+
+    created = _create_players(players, count=9)
+    table = tables.create_table(event.event_id, "T1")
+    games.create_game_with_players(table.table_id, created[:4])
+    games.create_game_with_players(table.table_id, created[4:8])
+    first_game = (
+        manager.session.query(models.Game)
+        .filter(models.Game.table_id == table.table_id)
+        .order_by(models.Game.game_id)
+        .first()
+    )
+    assert first_game is not None
+    games.set_game_status(first_game.game_id, 1)
+
+    table = manager.session.get(models.Table, table.table_id)
+    assert table is not None
+
+    assert table.game_counts() == (1, 2)
+    assert table.game_counts(created[0]) == (1, 1)
+    assert table.game_counts(created[4]) == (0, 1)
+    assert table.game_counts(created[8]) == (0, 0)
+
+
 def test_ready_and_game_status(services) -> None:
     manager, players, tables, _events, ready, games = services
 

@@ -56,21 +56,25 @@ class InfoHandlers:
             await update.effective_message.reply_text(self.tr(lang, "player_not_found"))
             return
 
-        message = ""
+        message_parts = []
         if self.is_admin(user.id):
-            message += self.tr(
-                lang,
-                "player_info_admin_ids",
-                player_id=player.p_id,
-                telegram_id=player.telegram_id,
+            message_parts.append(
+                self.tr(
+                    lang,
+                    "player_info_admin_ids",
+                    player_id=player.p_id,
+                    telegram_id=player.telegram_id,
+                )
             )
 
-        message += self.tr(
-            lang,
-            "player_info_profile",
-            telegram_name=player.telegram_name,
-            tenhou_name=player.tenhou_name,
-            name=player.irl_name,
+        message_parts.append(
+            self.tr(
+                lang,
+                "player_info_profile",
+                telegram_name=player.telegram_name,
+                tenhou_name=player.tenhou_name,
+                name=player.irl_name,
+            )
         )
 
         now = now_in_timezone(self.timezone)
@@ -80,11 +84,11 @@ class InfoHandlers:
         tables.sort(key=lambda el: el.deadline_group)
 
         for table in tables:
-            message += self.tr(lang, "table_name", table=table.name) + "\n"
-            message += table.players_string(mention=True) + "\n"
+            message_parts.append(self.tr(lang, "table_name", table=table.name) + "\n")
+            message_parts.append(table.players_string(mention=True) + "\n")
             if table.unfinished_games and table.get_relevant_times(left_cutoff=cutoff):
-                message += self.tr(lang, "table_times_heading")
-                message += (
+                message_parts.append(self.tr(lang, "table_times_heading"))
+                message_parts.append(
                     table.get_relevant_times_string(
                         self.timezone,
                         left_cutoff=cutoff,
@@ -92,16 +96,18 @@ class InfoHandlers:
                     )
                     + "\n"
                 )
-            message += (
+            played_games, total_games = table.game_counts(player)
+            message_parts.append(
                 self.tr(
                     lang,
                     "table_played_games",
-                    played=len(table.games) - len(table.unfinished_games()),
-                    total=len(table.games),
+                    played=played_games,
+                    total=total_games,
                 )
                 + "\n"
             )
 
+        message = "".join(message_parts)
         await update.effective_message.reply_text(message)
         log_command_event(update, "player_info", "succeeded", logger=logger, player_id=player.p_id)
 
@@ -139,30 +145,37 @@ class InfoHandlers:
             )
             await update.effective_message.reply_text(self.tr(lang, "table_not_found"))
             return
-        message = self.tr(lang, "table_name", table=table.table_id) + "\n"
-        message += table.players_string(mention=True) + "\n"
-        message += self.tr(
-            lang,
-            "table_played_games",
-            played=len(table.games) - len(table.unfinished_games()),
-            total=len(table.games),
-        )
+        message_parts = [
+            self.tr(lang, "table_name", table=table.table_id) + "\n",
+            table.players_string(mention=True) + "\n",
+            self.tr(
+                lang,
+                "table_played_games",
+                played=len(table.games) - len(table.unfinished_games()),
+                total=len(table.games),
+            ),
+        ]
 
         now = now_in_timezone(self.timezone)
         cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
 
         if table.unfinished_games() and table.get_relevant_times(left_cutoff=cutoff):
-            message += self.tr(lang, "table_times_heading")
-            message += table.get_relevant_times_string(
-                self.timezone,
-                left_cutoff=cutoff,
-                weekday_names=tuple(self.weekday_names(lang)),
+            message_parts.extend(
+                [
+                    self.tr(lang, "table_times_heading"),
+                    table.get_relevant_times_string(
+                        self.timezone,
+                        left_cutoff=cutoff,
+                        weekday_names=tuple(self.weekday_names(lang)),
+                    ),
+                ]
             )
-        message += "\n\n"
+        message_parts.append("\n\n")
 
         for game in table.games:
-            message += game.info_string(self.translate(lang))
+            message_parts.append(game.info_string(self.translate(lang)))
 
+        message = "".join(message_parts)
         await update.effective_message.reply_text(message)
         log_command_event(update, "table_info", "succeeded", logger=logger, table_id=table.table_id)
 
