@@ -218,8 +218,6 @@ class TableHandlers:
     @command_handler("set_time")
     async def set_time_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Add one proposed game time for this table."""
-        user = update.effective_user
-
         table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
             log_command_event(
@@ -241,19 +239,6 @@ class TableHandlers:
             )
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="no_unstarted_games"
-            )
-            return
-
-        if user is None:
-            log_command_event(
-                update, "set_time", "rejected", logger=logger, reason="user_not_found"
-            )
-            return
-        player = self.players.get_player(telegram_id=user.id)
-        if player is None or player not in table.get_unfinished_players():
-            await update.effective_message.reply_text(self.tr("ru", "set_time_not_table_player"))
-            log_command_event(
-                update, "set_time", "rejected", logger=logger, reason="not_table_player"
             )
             return
 
@@ -301,8 +286,6 @@ class TableHandlers:
 
     @command_handler("remove_time")
     async def remove_time_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        user = update.effective_user
-
         table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
             log_command_event(
@@ -311,13 +294,6 @@ class TableHandlers:
             await update.effective_message.reply_text(self.tr("ru", "no_table_in_chat"))
             return
 
-        player = self.players.get_player(telegram_id=user.id)
-        if player not in table.get_unfinished_players() and not self.is_admin(user.id):
-            await update.effective_message.reply_text(self.tr("ru", "remove_time_not_table_player"))
-            log_command_event(
-                update, "remove_time", "rejected", logger=logger, reason="not_table_player"
-            )
-            return
         if not self.tables.clear_table_times(table.table_id):
             log_command_event(
                 update, "remove_time", "failed", logger=logger, reason="table_not_found"
