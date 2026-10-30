@@ -38,7 +38,7 @@ class ChatHandlers:
             await chat.send_message(self.tr(lang, "set_chat_invite_error"))
             logger.error(e)
             return
-        for player in table.players():
+        for player in table.get_all_players():
             member = await chat.get_member(player.telegram_id)
             logger.info(member)
             if str(member.status).lower() == "left":

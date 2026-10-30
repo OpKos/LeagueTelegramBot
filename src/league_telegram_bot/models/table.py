@@ -16,7 +16,6 @@ from .base import Base
 if TYPE_CHECKING:
     from .event import Event
     from .game import Game
-    from .table_player import TablePlayer
     from .table_time import TableTime
 
 
@@ -31,24 +30,30 @@ class Table(Base):
     deadline_group: Mapped[int] = mapped_column(insert_default=0)
     event: Mapped[Event] = relationship(back_populates="tables", lazy="subquery")
     games: Mapped[list[Game]] = relationship(back_populates="table", lazy="subquery")
-    players_seats: Mapped[list[TablePlayer]] = relationship(back_populates="table", lazy="subquery")
     table_times: Mapped[list[TableTime]] = relationship(back_populates="table", lazy="subquery")
 
     def unfinished_games(self):
         self.games.sort(key=lambda game: game.game_id)
         return [g for g in self.games if g.started == 0]
 
-    def players(self):
-        self.players_seats.sort(key=lambda tp: tp.seat)
-        return [tp.player for tp in self.players_seats]
+    def get_all_players(self):
+        players = []
+        seen_player_ids = set()
+        for game in sorted(self.games, key=lambda game: game.game_id):
+            for player in game.players():
+                if player.p_id not in seen_player_ids:
+                    players.append(player)
+                    seen_player_ids.add(player.p_id)
+        return players
 
     def get_unfinished_players(self):
-        games = self.unfinished_games()
         players = []
-        for game in games:
+        seen_player_ids = set()
+        for game in self.unfinished_games():
             for player in game.players():
-                if player not in players:
+                if player.p_id not in seen_player_ids:
                     players.append(player)
+                    seen_player_ids.add(player.p_id)
         return players
 
     def remaining_unassigned_games(self) -> int:
@@ -62,7 +67,7 @@ class Table(Base):
     def players_string(self, mention: bool = False) -> str:
         return "\n".join(
             f"{player.irl_name} ({player.dirty_mention()})" if mention else player.irl_name
-            for player in self.players()
+            for player in self.get_all_players()
         )
 
     def ready_string(self, ready_player_ids: set[int]) -> str:

@@ -68,14 +68,14 @@ def test_table_and_game_creation(services) -> None:
 
     created = _create_players(players)
 
-    table = tables.create_table_with_players(event.event_id, "T1", created)
+    table = tables.create_table(event.event_id, "T1")
     manager.session.commit()
 
     table = manager.session.get(models.Table, table.table_id)
     assert table is not None
-    assert len(table.players()) == 4
 
     games.create_game_with_players(table.table_id, created)
+    assert len(table.get_all_players()) == 4
     game = manager.session.query(models.Game).first()
     assert game is not None
     assert len(game.players()) == 4
@@ -89,7 +89,7 @@ def test_ready_and_game_status(services) -> None:
     manager.session.commit()
 
     created = _create_players(players)
-    table = tables.create_table_with_players(event.event_id, "T1", created)
+    table = tables.create_table(event.event_id, "T1")
     manager.session.commit()
     games.create_game_with_players(table.table_id, created)
 
@@ -113,7 +113,7 @@ def test_get_first_ready_game_returns_first_ready_unfinished_game(services) -> N
     manager.session.commit()
 
     created = _create_players(players, count=8)
-    table = tables.create_table_with_players(event.event_id, "T1", created)
+    table = tables.create_table(event.event_id, "T1")
     manager.session.commit()
     games.create_game_with_players(table.table_id, created[:4])
     games.create_game_with_players(table.table_id, created[4:])
@@ -141,7 +141,7 @@ def test_game_and_table_presentation_methods(services) -> None:
     created = _create_players(players)
     for index, player in enumerate(created):
         players.fill_player_data(player.p_id, f"Player {index}")
-    table = tables.create_table_with_players(event.event_id, "T1", created)
+    table = tables.create_table(event.event_id, "T1")
     manager.session.commit()
     games.create_game_with_players(table.table_id, created)
 
@@ -175,8 +175,7 @@ def test_table_relevant_time_string(services) -> None:
     manager.session.add(event)
     manager.session.commit()
 
-    created = _create_players(players)
-    table = tables.create_table_with_players(event.event_id, "T1", created)
+    table = tables.create_table(event.event_id, "T1")
     manager.session.add(
         models.TableTime(
             table_id=table.table_id,
@@ -199,8 +198,7 @@ def test_table_service_adds_and_clears_scheduled_times(services) -> None:
     manager.session.add(event)
     manager.session.commit()
 
-    created = _create_players(players)
-    table = tables.create_table_with_players(event.event_id, "T1", created)
+    table = tables.create_table(event.event_id, "T1")
     manager.session.commit()
 
     assert tables.add_table_time(table.table_id, 100, 2, reminder_cutoff=150)
@@ -218,19 +216,45 @@ def test_table_service_adds_and_clears_scheduled_times(services) -> None:
 
 
 def test_player_tables_include_all_started_event_tables(services) -> None:
-    manager, players, tables, _events, _ready, _games = services
+    manager, players, tables, _events, _ready, games = services
     started_event = models.Event(name="Started", started=1)
     unstarted_event = models.Event(name="Unstarted", started=0)
     manager.session.add_all([started_event, unstarted_event])
     manager.session.commit()
 
     created = _create_players(players)
-    started_table = tables.create_table_with_players(
-        started_event.event_id, "Started table", created
-    )
-    tables.create_table_with_players(unstarted_event.event_id, "Unstarted table", created)
+    started_table = tables.create_table(started_event.event_id, "Started table")
+    unstarted_table = tables.create_table(unstarted_event.event_id, "Unstarted table")
+    games.create_game_with_players(started_table.table_id, created)
+    games.create_game_with_players(started_table.table_id, created)
+    games.create_game_with_players(unstarted_table.table_id, created)
     manager.session.commit()
 
     player = manager.session.get(models.Player, created[0].p_id)
     assert player is not None
     assert player.all_tables() == [started_table]
+
+
+def test_table_rosters_use_unique_all_and_unfinished_game_players(services) -> None:
+    manager, players, tables, _events, _ready, games = services
+    event = models.Event(name="Event", started=1)
+    manager.session.add(event)
+    manager.session.commit()
+
+    created = _create_players(players, count=6)
+    table = tables.create_table(event.event_id, "T1")
+    games.create_game_with_players(table.table_id, created[:4])
+    games.create_game_with_players(table.table_id, [created[0], created[1], created[4], created[5]])
+    first_game = (
+        manager.session.query(models.Game)
+        .filter(models.Game.table_id == table.table_id)
+        .order_by(models.Game.game_id)
+        .first()
+    )
+    assert first_game is not None
+    games.set_game_status(first_game.game_id, 1)
+
+    table = manager.session.get(models.Table, table.table_id)
+    assert table is not None
+    assert table.get_all_players() == created
+    assert table.get_unfinished_players() == [created[0], created[1], created[4], created[5]]
