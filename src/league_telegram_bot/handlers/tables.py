@@ -250,7 +250,7 @@ class TableHandlers:
             )
             return
         player = self.players.get_player(telegram_id=user.id)
-        if player is None or player not in table.players():
+        if player is None or player not in table.get_unfinished_players():
             await update.effective_message.reply_text(self.tr("ru", "set_time_not_table_player"))
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="not_table_player"
@@ -312,7 +312,7 @@ class TableHandlers:
             return
 
         player = self.players.get_player(telegram_id=user.id)
-        if player not in table.players() and not self.is_admin(user.id):
+        if player not in table.get_unfinished_players() and not self.is_admin(user.id):
             await update.effective_message.reply_text(self.tr("ru", "remove_time_not_table_player"))
             log_command_event(
                 update, "remove_time", "rejected", logger=logger, reason="not_table_player"

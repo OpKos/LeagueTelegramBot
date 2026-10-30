@@ -115,7 +115,7 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
         name="T1",
         table_times=[SimpleNamespace(games=2)],
         unfinished_games=lambda: [object(), object(), object()],
-        players=lambda: [player],
+        get_unfinished_players=lambda: [player],
         validate_scheduled_game_count=Mock(),
     )
     scheduled_times = Mock()

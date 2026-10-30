@@ -10,7 +10,6 @@ from .base import Base
 if TYPE_CHECKING:
     from .event_player import EventPlayer
     from .game_player import GamePlayer
-    from .table_player import TablePlayer
 
 
 class Player(Base):
@@ -24,13 +23,19 @@ class Player(Base):
     pantheon_id: Mapped[int] = mapped_column(nullable=True)
     is_admin: Mapped[int] = mapped_column(insert_default=0, server_default=sqlalchemy.text("0"))
     games_seats: Mapped[list[GamePlayer]] = relationship(back_populates="player", lazy="subquery")
-    tables_seats: Mapped[list[TablePlayer]] = relationship(back_populates="player", lazy="subquery")
     player_events: Mapped[list[EventPlayer]] = relationship(
         back_populates="player", lazy="subquery"
     )
 
     def all_tables(self):
-        return [tp.table for tp in self.tables_seats if tp.table.event.started == 1]
+        tables = []
+        seen_table_ids = set()
+        for game_player in self.games_seats:
+            table = game_player.game.table
+            if table.table_id not in seen_table_ids and table.event.started == 1:
+                tables.append(table)
+                seen_table_ids.add(table.table_id)
+        return tables
 
     def dirty_mention(self) -> str:
         return f"@{self.telegram_name}"

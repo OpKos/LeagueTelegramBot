@@ -49,7 +49,7 @@ def create_seating_image(
         if grid_y == 0 and i > 0:
             top = inter_gap + header_h + inter_gap
             center += block_w + inter_gap + 30
-        table_h = row_h * (len(table.players()) + 1) + gap * 2
+        table_h = row_h * (len(table.get_all_players()) + 1) + gap * 2
         if grid_x == grid_w - 1 and grid_y == 0:
             true_w = center + block_w // 2 + inter_gap
         d.rounded_rectangle(
@@ -68,7 +68,7 @@ def create_seating_image(
             font=table_font,
         )
         top += row_h
-        for player in table.players():
+        for player in table.get_all_players():
             d.text(
                 anchor="mm",
                 xy=(center, top + row_h / 2),
