@@ -9,7 +9,6 @@ from league_telegram_bot.models.game import Game
 from league_telegram_bot.models.game_player import GamePlayer
 from league_telegram_bot.models.player import Player
 from league_telegram_bot.models.table import Table
-from league_telegram_bot.models.table_player import TablePlayer
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

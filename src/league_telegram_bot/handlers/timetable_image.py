@@ -60,7 +60,7 @@ def create_timetable_image(table_times: list[TableTime], filename: str, timezone
             font=table_font,
         )
         top += row_h
-        for player in table.players():
+        for player in table.get_unfinished_players():
             d.text(
                 anchor="mm",
                 xy=(margin + time_w + block_w / 2, top + row_h / 2),

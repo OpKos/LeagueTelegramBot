@@ -233,10 +233,9 @@ def create_seating(tables: TableService, games: GameService, event: models.Event
         random.shuffle(group_tables)
 
         for table_order in group_tables:
-            table = tables.create_table_with_players(
+            table = tables.create_table(
                 event_id=event.event_id,
                 table_name=f"{event.name}{number}",
-                players=table_order,
                 deadline_group=group_idx,
             )
             number += 1
@@ -253,10 +252,9 @@ def add_table(
     table_name: str,
     deadline_group: int = 0,
 ):
-    table = tables.create_table_with_players(
+    table = tables.create_table(
         event_id=event.event_id,
         table_name=table_name,
-        players=players,
         deadline_group=deadline_group,
     )
     schema = FOUR_SEAT_ORDERS

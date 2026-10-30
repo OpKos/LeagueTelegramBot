@@ -74,7 +74,7 @@ def table_time_string(
         weekday_names=weekday_names,
     )
     player_list = []
-    for player in table.players():
+    for player in table.get_unfinished_players():
         player_list.append(player.clean_mention() if mention else player.irl_name)
     amount = game_amount_string(table_time.games, lang, translate)
     return translate(

@@ -5,7 +5,6 @@ from .game_player import GamePlayer
 from .player import Player
 from .ready_player import ReadyPlayer
 from .table import Table
-from .table_player import TablePlayer
 from .table_time import TableTime
 
 __all__ = [
@@ -16,6 +15,5 @@ __all__ = [
     "Player",
     "ReadyPlayer",
     "Table",
-    "TablePlayer",
     "TableTime",
 ]
