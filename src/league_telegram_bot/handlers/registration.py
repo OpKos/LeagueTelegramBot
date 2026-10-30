@@ -16,17 +16,17 @@ class RegistrationHandlers:
     async def set_nickname_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        """
-        Регистрирует нового игрока в системе.
-
-        Args:
-            update (Update): Объект Update от Telegram.
-            context (ContextTypes.DEFAULT_TYPE): Контекст выполнения команды.
-        """
+        """Регистрирует нового игрока в системе."""
         user = update.effective_user
         args = context.args
-        assert update.effective_message
-        assert user
+        if update.effective_message.chat.type != "private":
+            log_command_event(
+                update, "set_nickname", "rejected", logger=logger, reason="not_private_chat"
+            )
+            await update.effective_message.reply_text(
+                self.tr_for_user(user.id, "register_not_private_chat")
+            )
+            return
         if not args or len(args) != 1:
             log_command_event(
                 update, "set_nickname", "rejected", logger=logger, reason="invalid_arguments"
@@ -48,6 +48,7 @@ class RegistrationHandlers:
                 )
             else:
                 self.players.update_tenhou_nick(p_id=player.p_id, tenhou_name=tenhou_name)
+                self.players.update_telegram_name(p_id=player.p_id, telegram_name=user.username)
                 await update.effective_message.reply_text(
                     self.tr(lang, "nick_change", old=old_name, new=tenhou_name)
                 )

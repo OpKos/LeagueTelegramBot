@@ -31,6 +31,12 @@ class PlayerService:
         player.tenhou_name = tenhou_name
         self._session_provider.session.commit()
 
+    def update_telegram_name(self, p_id: int, telegram_name: str):
+        player = self._session_provider.session.get(models.Player, p_id)
+        assert player
+        player.telegram_name = telegram_name
+        self._session_provider.session.commit()
+
     def get_player(
         self,
         p_id: int | None = None,

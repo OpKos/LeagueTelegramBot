@@ -350,5 +350,9 @@
     "reminder_message": {
         "ru": "Напоминание о назначенном времени:\n{time}",
         "en": "Reminder of the scheduled time:\n{time}"
+    },
+    "register_not_private_chat": {
+        "ru": "Эта команда доступна только в личных сообщениях с ботом.",
+        "en": "This command is only available in a private chat with the bot."
     }
 }
