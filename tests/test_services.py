@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import datetime
+
 import pytest
 
-from league_telegram_bot import models
+from league_telegram_bot import models, time_utils
 from league_telegram_bot.models.base import Base
 from league_telegram_bot.services import (
     EventService,
@@ -132,6 +134,62 @@ def test_ready_and_game_status(services) -> None:
 
     ready.set_player_unready(created[0].p_id)
     assert games.check_game_ready(game.game_id) is False
+
+
+def test_ready_timestamp_refreshes_when_player_presses_ready(services, monkeypatch) -> None:
+    manager, players, _tables, _events, ready, _games = services
+    player = _create_players(players, count=1)[0]
+    current_time = datetime.datetime(2026, 10, 31, 1, 0, tzinfo=datetime.UTC)
+    monkeypatch.setattr(time_utils, "now_in_timezone", lambda _timezone: current_time)
+
+    ready.set_player_ready(player.p_id)
+    ready_player = manager.session.get(models.ReadyPlayer, player.p_id)
+    assert ready_player is not None
+    assert ready_player.timestamp == int(current_time.timestamp())
+    assert ready.check_player_ready(player.p_id) is True
+
+    next_time = current_time + datetime.timedelta(seconds=1)
+    monkeypatch.setattr(time_utils, "now_in_timezone", lambda _timezone: next_time)
+    ready.set_player_ready(player.p_id)
+    assert ready_player.timestamp == int(next_time.timestamp())
+
+
+def test_ready_timestamp_expires_after_30_minutes(services, monkeypatch) -> None:
+    manager, players, _tables, _events, ready, _games = services
+    player = _create_players(players, count=1)[0]
+    current_time = datetime.datetime(2026, 10, 31, 1, 0, tzinfo=datetime.UTC)
+    manager.session.add(
+        models.ReadyPlayer(
+            p_id=player.p_id,
+            timestamp=int((current_time - datetime.timedelta(minutes=29, seconds=59)).timestamp()),
+        )
+    )
+    manager.session.commit()
+    monkeypatch.setattr(time_utils, "now_in_timezone", lambda _timezone: current_time)
+
+    assert ready.check_player_ready(player.p_id) is True
+
+    ready_player = manager.session.get(models.ReadyPlayer, player.p_id)
+    assert ready_player is not None
+    ready_player.timestamp = int((current_time - datetime.timedelta(minutes=30)).timestamp())
+    manager.session.commit()
+    assert ready.check_player_ready(player.p_id) is False
+
+
+def test_zero_ready_timestamp_is_expired(services, monkeypatch) -> None:
+    manager, players, _tables, _events, ready, _games = services
+    player = _create_players(players, count=1)[0]
+    manager.session.add(
+        models.ReadyPlayer(
+            p_id=player.p_id,
+            timestamp=0,
+        )
+    )
+    manager.session.commit()
+    current_time = datetime.datetime(1970, 1, 1, 0, 30, tzinfo=datetime.UTC)
+    monkeypatch.setattr(time_utils, "now_in_timezone", lambda _timezone: current_time)
+
+    assert ready.check_player_ready(player.p_id) is False
 
 
 def test_get_first_ready_game_returns_first_ready_unfinished_game(services) -> None:

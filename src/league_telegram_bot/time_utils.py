@@ -135,6 +135,21 @@ def now_in_timezone(timezone: str) -> datetime.datetime:
     return datetime.datetime.now(tz=get_timezone(timezone))
 
 
+def current_timestamp() -> int:
+    return int(now_in_timezone("UTC").timestamp())
+
+
+def is_within_time_window(
+    timestamp: int,
+    duration: datetime.timedelta,
+    now: datetime.datetime | None = None,
+) -> bool:
+    current_time = now or now_in_timezone("UTC")
+    timestamp_datetime = datetime_from_timestamp(timestamp, "UTC")
+    current_time_utc = current_time.astimezone(get_timezone("UTC"))
+    return current_time_utc - duration < timestamp_datetime <= current_time_utc
+
+
 def datetime_to_timestamp(value: datetime.datetime, timezone: str) -> int:
     target_timezone = get_timezone(timezone)
     if value.tzinfo is None:

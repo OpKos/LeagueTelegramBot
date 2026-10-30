@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from .. import models
+import datetime
+
+from .. import models, time_utils
 from .session import SessionProvider
 
 
@@ -10,12 +12,18 @@ class ReadyService:
 
     def check_player_ready(self, p_id: int):
         rp = self._session_provider.session.get(models.ReadyPlayer, p_id)
-        return bool(rp)
+        if rp is None:
+            return False
+        return time_utils.is_within_time_window(rp.timestamp, datetime.timedelta(minutes=30))
 
     def set_player_ready(self, p_id: int):
         player = self._session_provider.session.get(models.Player, p_id)
-        if player and not self.check_player_ready(p_id):
-            rp = models.ReadyPlayer(p_id=p_id)
+        if player:
+            rp = self._session_provider.session.get(models.ReadyPlayer, p_id)
+            if rp is None:
+                rp = models.ReadyPlayer(p_id=p_id, timestamp=time_utils.current_timestamp())
+            else:
+                rp.timestamp = time_utils.current_timestamp()
             self._session_provider.session.add(rp)
             self._session_provider.session.commit()
         return False
