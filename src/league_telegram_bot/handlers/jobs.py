@@ -97,16 +97,25 @@ async def remind_tables(context: ContextTypes.DEFAULT_TYPE) -> None:
     for time in times:
         if time.need_reminder == 0:
             continue
+        display_time = "\n".join(
+            handlers.tr(
+                "ru",
+                "timezone_time",
+                timezone=timezone,
+                time=timestring_from_timestamp(
+                    time.time,
+                    day=True,
+                    weekday=True,
+                    timezone=timezone,
+                    weekday_names=handlers.weekday_names("ru"),
+                ),
+            )
+            for timezone in time.table.get_timezones(handlers.timezone)
+        )
         message = handlers.tr(
             "ru",
             "reminder_message",
-            time=timestring_from_timestamp(
-                time.time,
-                day=True,
-                weekday=True,
-                timezone=handlers.timezone,
-                weekday_names=handlers.weekday_names("ru"),
-            ),
+            time=display_time,
         )
         try:
             await context.bot.send_message(chat_id=time.table.chat_id, text=message)

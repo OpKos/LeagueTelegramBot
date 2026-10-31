@@ -20,6 +20,7 @@ class Player(Base):
     tenhou_name: Mapped[str] = mapped_column(unique=True)
     irl_name: Mapped[str] = mapped_column(nullable=True)
     language: Mapped[str] = mapped_column(insert_default="ru", server_default="ru")
+    timezone: Mapped[str | None] = mapped_column(nullable=True)
     pantheon_id: Mapped[int] = mapped_column(nullable=True)
     is_admin: Mapped[int] = mapped_column(insert_default=0, server_default=sqlalchemy.text("0"))
     games_seats: Mapped[list[GamePlayer]] = relationship(back_populates="player", lazy="subquery")

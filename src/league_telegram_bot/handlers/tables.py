@@ -9,7 +9,12 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from .. import models
-from ..time_utils import TableTimeInputError, now_in_timezone, parse_table_time
+from ..time_utils import (
+    TableTimeInputError,
+    datetime_from_timestamp,
+    now_in_timezone,
+    parse_table_time,
+)
 from .decorators import callback_query_handler, command_handler
 from .utils import game_amount_string, generate_calendar_event, log_command_event, table_time_string
 
@@ -243,14 +248,15 @@ class TableHandlers:
             )
             return
 
-        now = now_in_timezone(self.timezone)
+        timezone = self.timezone_for_user(update.effective_user.id)
+        now = now_in_timezone(timezone)
         try:
             scheduled_time = parse_table_time(
                 context.args[0],
                 context.args[1],
                 context.args[2],
                 now,
-                self.timezone,
+                timezone,
             )
             table.validate_scheduled_game_count(scheduled_time.games)
         except TableTimeInputError as error:
@@ -271,10 +277,17 @@ class TableHandlers:
             log_command_event(update, "set_time", "failed", logger=logger, reason="table_not_found")
             await update.effective_message.reply_text(self.tr("ru", "set_time_save_failed"))
             return
-        local_time = datetime.datetime.fromtimestamp(scheduled_time.timestamp, tz=now.tzinfo)
-        display = (
-            f"{local_time.strftime('%d.%m %H:%M')} "
-            f"({game_amount_string(scheduled_time.games, 'ru', self.translate('ru'))})"
+        display = "\n".join(
+            self.tr(
+                "ru",
+                "timezone_time",
+                timezone=table_timezone,
+                time=(
+                    f"{datetime_from_timestamp(scheduled_time.timestamp, table_timezone).strftime('%d.%m %H:%M')} "
+                    f"({game_amount_string(scheduled_time.games, 'ru', self.translate('ru'))})"
+                ),
+            )
+            for table_timezone in table.get_timezones(self.timezone)
         )
         await update.effective_message.reply_text(self.tr("ru", "set_time_success", time=display))
         calendar_filename = f"Kawa_Table_{table.name}.ics"
@@ -291,7 +304,7 @@ class TableHandlers:
             await update.effective_message.reply_document(document=calendar_file)
         log_command_event(update, "set_time", "succeeded", logger=logger, table_id=table.table_id)
         await update.effective_message.chat.send_poll(
-            question=scheduled_time.display,
+            question=display,
             options=[self.tr("ru", "set_time_poll")],
             allows_revoting=False,
             is_anonymous=False,
@@ -332,14 +345,15 @@ class TableHandlers:
             await update.effective_message.reply_text(self.tr(lang, "private_chat_required"))
             return
 
-        now = now_in_timezone(self.timezone)
+        timezone = self.timezone_for_user(user.id)
+        now = now_in_timezone(timezone)
         cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
         known_times = self.tables.get_all_relevant_table_times(left_cutoff=cutoff)
         known_str = "".join(
             table_time_string(
                 i,
                 explicit=True,
-                timezone=self.timezone,
+                timezone=timezone,
                 lang=lang,
                 translate=self.translate(lang),
                 weekday_names=tuple(self.weekday_names(lang)),
@@ -349,6 +363,7 @@ class TableHandlers:
         ans = known_str
         if ans == "":
             ans = self.tr(lang, "timetable_empty")
+        ans += "\n\n" + self.tr(lang, "timezone_note", timezone=timezone)
         await update.effective_message.reply_text(ans, parse_mode=ParseMode.HTML)
         log_command_event(
             update, "timetable", "succeeded", logger=logger, table_count=len(known_times)

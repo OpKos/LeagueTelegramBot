@@ -31,6 +31,22 @@
         "ru": "Чтобы выбрать язык, используйте /set_language ru или /set_language en.",
         "en": "Choose your language with /set_language ru or /set_language en."
     },
+    "timezone_invalid_args": {
+        "ru": "Использование: /set_timezone <часовой пояс IANA>, например /set_timezone Europe/Moscow.\nСписок часовых поясов: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones",
+        "en": "Usage: /set_timezone <IANA timezone>, for example /set_timezone Europe/Moscow.\nList of timezones: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
+    },
+    "timezone_set": {
+        "ru": "Часовой пояс установлен: {timezone}\nТекущее время: {time}",
+        "en": "Timezone set to {timezone}\nCurrent time: {time}"
+    },
+    "timezone_note": {
+        "ru": "Время указано в часовом поясе {timezone}. Чтобы изменить его: /set_timezone",
+        "en": "Times are shown in {timezone}. To change it: /set_timezone"
+    },
+    "timezone_time": {
+        "ru": "{timezone}: {time}",
+        "en": "{timezone}: {time}"
+    },
     "register_welcome": {
         "ru": "Вы успешно зарегистрированы!",
         "en": "You have been registered successfully!"
@@ -128,8 +144,8 @@
         "en": "Usage: /start_table"
     },
     "set_time_usage": {
-        "ru": "Использование: /set_time <день> <время> <число игр>\nДень указывайте числом месяца или кратким названием дня недели (пн/вт/ср/чт/пт/сб/вс или mon/tue/wed/thu/fri/sat/sun).\nВремя можно указывать с минутами или без; разделитель не обязателен.\nПримеры: /set_time вт 17 2, /set_time 25 1715 4",
-        "en": "Usage: /set_time <day> <time> <game count>\nUse a day of the month or a short weekday name (mon/tue/wed/thu/fri/sat/sun).\nTime may include minutes; a separator is optional.\nExamples: /set_time tue 17 2, /set_time 25 1715 4"
+        "ru": "Использование: /set_time <день> <время> <число игр>\nДень указывайте числом месяца или кратким названием дня недели (пн/вт/ср/чт/пт/сб/вс или mon/tue/wed/thu/fri/sat/sun).\nУказывайте время в своём часовом поясе. Минуты можно указывать или опустить; разделитель не обязателен.\nПримеры: /set_time вт 17 2, /set_time 25 1715 4",
+        "en": "Usage: /set_time <day> <time> <game count>\nUse a day of the month or a short weekday name (mon/tue/wed/thu/fri/sat/sun).\nSpecify the time in your own timezone. Time may include minutes; a separator is optional.\nExamples: /set_time tue 17 2, /set_time 25 1715 4"
     },
     "set_time_no_games": {
         "ru": "Нет неначатых игр за столом {table}.",

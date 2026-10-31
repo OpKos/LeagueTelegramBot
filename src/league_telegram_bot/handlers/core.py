@@ -71,6 +71,13 @@ class BaseHandlers:
         user = update.effective_user
         return self.language_for_user(user.id if user is not None else None)
 
+    def timezone_for_user(self, user_id: int | None) -> str:
+        if user_id is not None:
+            player = self.players.get_player(telegram_id=user_id)
+            if player is not None and player.timezone:
+                return player.timezone
+        return self.timezone
+
     def tr_for_user(self, user_id: int | None, key: str, **kwargs) -> str:
         return self.tr(self.language_for_user(user_id), key, **kwargs)
 
