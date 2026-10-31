@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 
@@ -100,3 +103,31 @@ def game_amount_string(games: int, lang: str, translate: Callable[..., str]) -> 
     else:
         form = "many"
     return translate(f"games_amount_ru_{form}", count=games)
+
+
+def generate_calendar_event(
+    name: str, start_time: datetime, length: timedelta, filename: str = "event.ics"
+) -> None:
+    end_time = start_time + length
+
+    start_time = start_time.astimezone(UTC)
+    end_time = end_time.astimezone(UTC)
+
+    def format_datetime(dt: datetime) -> str:
+        return dt.strftime("%Y%m%dT%H%M%SZ")
+
+    event = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Python Calendar Generator//EN",
+        "BEGIN:VEVENT",
+        f"UID:{uuid4()}",
+        f"DTSTAMP:{format_datetime(datetime.now(UTC))}",
+        f"DTSTART:{format_datetime(start_time)}",
+        f"DTEND:{format_datetime(end_time)}",
+        f"SUMMARY:{name}",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+
+    Path(filename).write_text("\n".join(event) + "\n", encoding="utf-8")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -10,7 +11,7 @@ from telegram.ext import ContextTypes
 from .. import models
 from ..time_utils import TableTimeInputError, now_in_timezone, parse_table_time
 from .decorators import callback_query_handler, command_handler
-from .utils import game_amount_string, log_command_event, table_time_string
+from .utils import game_amount_string, generate_calendar_event, log_command_event, table_time_string
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +277,18 @@ class TableHandlers:
             f"({game_amount_string(scheduled_time.games, 'ru', self.translate('ru'))})"
         )
         await update.effective_message.reply_text(self.tr("ru", "set_time_success", time=display))
+        calendar_filename = f"Kawa_Table_{table.name}.ics"
+        generate_calendar_event(
+            name=(
+                f"Kawa Table {table.name} "
+                f"({game_amount_string(scheduled_time.games, 'ru', self.translate('ru'))})"
+            ),
+            start_time=datetime.datetime.fromtimestamp(scheduled_time.timestamp, tz=now.tzinfo),
+            length=datetime.timedelta(hours=scheduled_time.games),
+            filename=calendar_filename,
+        )
+        with Path(calendar_filename).open("rb") as calendar_file:
+            await update.effective_message.reply_document(document=calendar_file)
         log_command_event(update, "set_time", "succeeded", logger=logger, table_id=table.table_id)
         await update.effective_message.chat.send_poll(
             question=scheduled_time.display,
