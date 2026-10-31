@@ -61,6 +61,20 @@ def test_player_service_register_and_update(services) -> None:
     manager.session.commit()
 
 
+def test_player_timezone_defaults_to_none_and_can_be_set(services) -> None:
+    _manager, players, _tables, _events, _ready, _games = services
+    players.register_player(telegram_id=2, telegram_name="bob", tenhou_id="tenhou_bob")
+
+    player = players.get_player(telegram_id=2)
+    assert player is not None
+    assert player.timezone is None
+
+    assert players.set_timezone(player.p_id, "Europe/Moscow") is True
+    player = players.get_player(p_id=player.p_id)
+    assert player is not None
+    assert player.timezone == "Europe/Moscow"
+
+
 def test_table_and_game_creation(services) -> None:
     manager, players, tables, _events, _ready, games = services
 

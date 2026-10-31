@@ -77,7 +77,8 @@ class InfoHandlers:
             )
         )
 
-        now = now_in_timezone(self.timezone)
+        timezone = self.timezone_for_user(user.id)
+        now = now_in_timezone(timezone)
         cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
 
         tables = player.all_tables()
@@ -90,7 +91,7 @@ class InfoHandlers:
                 message_parts.append(self.tr(lang, "table_times_heading"))
                 message_parts.append(
                     table.get_relevant_times_string(
-                        self.timezone,
+                        timezone,
                         left_cutoff=cutoff,
                         weekday_names=tuple(self.weekday_names(lang)),
                     )
@@ -108,6 +109,7 @@ class InfoHandlers:
             )
 
         message = "".join(message_parts)
+        message += "\n" + self.tr(lang, "timezone_note", timezone=timezone)
         await update.effective_message.reply_text(message)
         log_command_event(update, "player_info", "succeeded", logger=logger, player_id=player.p_id)
 
@@ -156,7 +158,8 @@ class InfoHandlers:
             ),
         ]
 
-        now = now_in_timezone(self.timezone)
+        timezone = self.timezone_for_user(user.id)
+        now = now_in_timezone(timezone)
         cutoff = int((now - datetime.timedelta(hours=3)).timestamp())
 
         if table.unfinished_games() and table.get_relevant_times(left_cutoff=cutoff):
@@ -164,7 +167,7 @@ class InfoHandlers:
                 [
                     self.tr(lang, "table_times_heading"),
                     table.get_relevant_times_string(
-                        self.timezone,
+                        timezone,
                         left_cutoff=cutoff,
                         weekday_names=tuple(self.weekday_names(lang)),
                     ),
@@ -176,6 +179,7 @@ class InfoHandlers:
             message_parts.append(game.info_string(self.translate(lang)))
 
         message = "".join(message_parts)
+        message += self.tr(lang, "timezone_note", timezone=timezone)
         await update.effective_message.reply_text(message)
         log_command_event(update, "table_info", "succeeded", logger=logger, table_id=table.table_id)
 

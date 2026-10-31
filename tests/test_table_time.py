@@ -108,14 +108,19 @@ def test_validate_scheduled_game_count_subtracts_existing_allocations() -> None:
 
 def test_set_time_command_appends_one_time_without_clearing_existing_times(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     player = SimpleNamespace(p_id=12)
+    second_player = SimpleNamespace(p_id=13, timezone="Asia/Tokyo")
     table = SimpleNamespace(
         table_id=5,
         name="T1",
         table_times=[SimpleNamespace(games=2)],
         unfinished_games=lambda: [object(), object(), object()],
         get_unfinished_players=lambda: [player],
+        get_all_players=lambda: [player, second_player],
+        get_timezones=lambda _default: ["Asia/Tokyo", "Europe/Moscow"],
         validate_scheduled_game_count=Mock(),
     )
     scheduled_times = Mock()
@@ -126,6 +131,7 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
     message = SimpleNamespace(
         chat_id=300,
         reply_text=AsyncMock(),
+        reply_document=AsyncMock(),
         chat=chat,
     )
     update = SimpleNamespace(
@@ -141,9 +147,11 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
     handlers.tables = scheduled_times
     handlers.players = Mock()
     handlers.players.get_player.return_value = player
-    handlers.timezone = "Europe/Moscow"
+    handlers.timezone = "UTC"
+    handlers.timezone_for_user = lambda _user_id: "Europe/Moscow"
     templates = {
         "set_time_success": "Время установлено:\n{time}",
+        "timezone_time": "{timezone}: {time}",
         "games_amount_ru_one": "{count} ханчан",
         "set_time_poll": "Согласен играть в это время",
     }
@@ -169,4 +177,10 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
     )
     scheduled_times.clear_table_times.assert_not_called()
     message.reply_text.assert_awaited_once()
+    confirmation = message.reply_text.await_args.args[0]
+    assert "Asia/Tokyo: 02.01 23:00" in confirmation
+    assert "Europe/Moscow: 02.01 17:00" in confirmation
     chat.send_poll.assert_awaited_once()
+    poll_question = chat.send_poll.await_args.kwargs["question"]
+    assert "Asia/Tokyo: 02.01 23:00" in poll_question
+    assert "Europe/Moscow: 02.01 17:00" in poll_question

@@ -82,6 +82,14 @@ class PlayerService:
             return True
         return False
 
+    def set_timezone(self, p_id: int, timezone: str):
+        player = self._session_provider.session.get(models.Player, p_id)
+        if player:
+            player.timezone = timezone
+            self._session_provider.session.commit()
+            return True
+        return False
+
     def get_unfilled_pantheon_players(self):
         players = (
             self._session_provider.session.query(models.Player)

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import logging
 
+import pytz
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ..time_utils import now_in_timezone
 from .decorators import command_handler
 from .utils import log_command_event
 
@@ -98,3 +100,37 @@ class RegistrationHandlers:
         self.players.set_language(player.p_id, lang)
         await update.message.reply_text(self.tr(lang, "language_set"))
         log_command_event(update, "set_language", "succeeded", logger=logger, language=lang)
+
+    @command_handler("set_timezone")
+    async def set_timezone(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+        assert user
+        assert update.effective_message
+        lang = self.language_for_user(user.id)
+        if len(context.args) != 1 or context.args[0] not in pytz.all_timezones:
+            log_command_event(
+                update, "set_timezone", "rejected", logger=logger, reason="invalid_timezone"
+            )
+            await update.effective_message.reply_text(self.tr(lang, "timezone_invalid_args"))
+            return
+
+        player = self.players.get_player(telegram_id=user.id)
+        if not player:
+            log_command_event(
+                update, "set_timezone", "rejected", logger=logger, reason="not_registered"
+            )
+            await update.effective_message.reply_text(self.tr(lang, "not_registered"))
+            return
+
+        timezone = context.args[0]
+        if not self.players.set_timezone(player.p_id, timezone):
+            log_command_event(
+                update, "set_timezone", "failed", logger=logger, reason="player_not_found"
+            )
+            await update.effective_message.reply_text(self.tr(lang, "not_registered"))
+            return
+        current_time = now_in_timezone(timezone).strftime("%Y-%m-%d %H:%M")
+        await update.effective_message.reply_text(
+            self.tr(lang, "timezone_set", timezone=timezone, time=current_time)
+        )
+        log_command_event(update, "set_timezone", "succeeded", logger=logger, timezone=timezone)
