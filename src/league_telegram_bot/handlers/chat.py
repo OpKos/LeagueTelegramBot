@@ -27,7 +27,9 @@ class ChatHandlers:
         table = self.tables.get_table(table_name=table_name)
         self.tables.set_table_chat(table.table_id, chat_id)
         await query.answer()
-        await query.edit_message_text(text=self.tr(lang, "set_chat_selected", table=table_name))
+        await query.edit_message_text(
+            text=self.tr_for_table(table, "set_chat_selected", table=table_name)
+        )
         try:
             await chat.set_title(self.tr(lang, "set_chat_title", table=table_name))
         except Exception as e:
@@ -35,7 +37,7 @@ class ChatHandlers:
         try:
             link = await context.bot.create_chat_invite_link(chat_id=chat_id)
         except Exception as e:
-            await chat.send_message(self.tr(lang, "set_chat_invite_error"))
+            await chat.send_message(self.tr_for_table(table, "set_chat_invite_error"))
             logger.error(e)
             return
         for player in table.get_all_players():
@@ -53,11 +55,11 @@ class ChatHandlers:
                         ),
                     )
                     await chat.send_message(
-                        self.tr(lang, "set_chat_invite_sent", player=player.irl_name)
+                        self.tr_for_table(table, "set_chat_invite_sent", player=player.irl_name)
                     )
                 except Exception as e:
                     await chat.send_message(
-                        self.tr(lang, "set_chat_invite_failed", player=player.irl_name)
+                        self.tr_for_table(table, "set_chat_invite_failed", player=player.irl_name)
                     )
                     logger.error(e)
 
@@ -94,7 +96,7 @@ class ChatHandlers:
                 update, "set_chat", "rejected", logger=logger, reason="table_already_assigned"
             )
             await update.effective_message.reply_text(
-                self.tr(lang, "set_chat_already_assigned", table=t.name)
+                self.tr_for_table(t, "set_chat_already_assigned", table=t.name)
             )
             return
         player = self.players.get_player(telegram_id=user.id)

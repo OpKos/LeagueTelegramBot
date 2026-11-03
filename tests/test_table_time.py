@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from league_telegram_bot.handlers import tables as table_handlers
+from league_telegram_bot.handlers.core import BaseHandlers
 from league_telegram_bot.handlers.tables import (
     TableHandlers,
     parse_table_time,
@@ -111,8 +112,8 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
     tmp_path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    player = SimpleNamespace(p_id=12)
-    second_player = SimpleNamespace(p_id=13, timezone="Asia/Tokyo")
+    player = SimpleNamespace(p_id=12, language="ru")
+    second_player = SimpleNamespace(p_id=13, timezone="Asia/Tokyo", language="en")
     table = SimpleNamespace(
         table_id=5,
         name="T1",
@@ -150,17 +151,33 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
     handlers.timezone = "UTC"
     handlers.timezone_for_user = lambda _user_id: "Europe/Moscow"
     templates = {
-        "set_time_success": "Время установлено:\n{time}",
+        "set_time_success": {
+            "ru": "Время установлено ({games}).",
+            "en": "Time set ({games}).",
+        },
         "timezone_time": "{timezone}: {time}",
         "games_amount_ru_one": "{count} ханчан",
-        "set_time_poll": "Согласен играть в это время",
+        "game_amount_one_en": "{count} game",
+        "set_time_poll": {
+            "ru": "Согласен играть в это время.",
+            "en": "Agree to play at that time.",
+        },
+        "set_time_calendar_title": {
+            "ru": "Кава, стол {table} ({games})",
+            "en": "Kawa Table {table} ({games})",
+        },
     }
 
     def translate(_lang: str, key: str, **kwargs: str) -> str:
-        return templates[key].format(**kwargs)
+        template = templates[key]
+        if isinstance(template, dict):
+            template = template[_lang]
+        return template.format(**kwargs)
 
     handlers.tr = translate
     handlers.translate = lambda lang: lambda key, **kwargs: handlers.tr(lang, key, **kwargs)
+    handlers.languages_for_table = BaseHandlers.languages_for_table.__get__(handlers)
+    handlers.tr_for_table = BaseHandlers.tr_for_table.__get__(handlers)
 
     asyncio.run(handlers.set_time_command(update, context))
 
@@ -178,9 +195,23 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
     scheduled_times.clear_table_times.assert_not_called()
     message.reply_text.assert_awaited_once()
     confirmation = message.reply_text.await_args.args[0]
-    assert "Asia/Tokyo: 02.01 23:00" in confirmation
-    assert "Europe/Moscow: 02.01 17:00" in confirmation
+    assert confirmation == (
+        "Время установлено (1 ханчан).\n"
+        "Time set (1 game).\n"
+        "Asia/Tokyo: 02.01 23:00\n"
+        "Europe/Moscow: 02.01 17:00"
+    )
+    assert message.reply_document.await_count == 2
+    filenames = [call.kwargs["filename"] for call in message.reply_document.await_args_list]
+    assert filenames == ["Kawa_Table_T1_ru.ics", "Kawa_Table_T1_en.ics"]
+    russian_calendar = (tmp_path / filenames[0]).read_text(encoding="utf-8")
+    english_calendar = (tmp_path / filenames[1]).read_text(encoding="utf-8")
+    assert "SUMMARY:Кава, стол T1 (1 ханчан)" in russian_calendar
+    assert "SUMMARY:Kawa Table T1 (1 game)" in english_calendar
     chat.send_poll.assert_awaited_once()
     poll_question = chat.send_poll.await_args.kwargs["question"]
     assert "Asia/Tokyo: 02.01 23:00" in poll_question
     assert "Europe/Moscow: 02.01 17:00" in poll_question
+    assert chat.send_poll.await_args.kwargs["options"] == [
+        "Согласен играть в это время./Agree to play at that time."
+    ]

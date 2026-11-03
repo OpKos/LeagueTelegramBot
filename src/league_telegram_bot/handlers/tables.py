@@ -27,14 +27,18 @@ class TableHandlers:
         table = self.tables.get_table(chat_id=update.effective_message.chat_id)
         if not table:
             log_command_event(update, "play", "rejected", logger=logger, reason="chat_has_no_table")
-            await update.effective_message.reply_text(self.tr("ru", "no_table_in_chat"))
+            await update.effective_message.reply_text(
+                self.tr_for_user(update.effective_user.id, "no_table_in_chat")
+            )
             return
 
         if not table.unfinished_games():
             log_command_event(
                 update, "play", "rejected", logger=logger, reason="no_unfinished_games"
             )
-            await update.effective_message.reply_text(text=self.tr("ru", "no_unfinished_games"))
+            await update.effective_message.reply_text(
+                text=self.tr_for_table(table, "no_unfinished_games")
+            )
             return
 
         msg = self.games.get_table_ready_string(table_id=table.table_id)
@@ -49,7 +53,15 @@ class TableHandlers:
         await query.answer()
         log_command_event(update, "ready_button", "started", logger=logger, action=data)
         if data == "Cancel":
-            await query.edit_message_text(text=self.tr("ru", "cancelled"))
+            table = self.tables.get_table(chat_id=chat.id)
+            text = (
+                self.tr_for_table(table, "cancelled")
+                if table is not None
+                else self.tr_for_user(
+                    update.effective_user.id if update.effective_user else None, "cancelled"
+                )
+            )
+            await query.edit_message_text(text=text)
             log_command_event(update, "ready_button", "rejected", logger=logger, reason="cancelled")
             return
         user = update.effective_user
@@ -71,7 +83,7 @@ class TableHandlers:
             )
             return
         if not table.unfinished_games():
-            await query.edit_message_text(text=self.tr("ru", "no_unfinished_games"))
+            await query.edit_message_text(text=self.tr_for_table(table, "no_unfinished_games"))
             log_command_event(
                 update, "ready_button", "rejected", logger=logger, reason="no_unfinished_games"
             )
@@ -138,14 +150,19 @@ class TableHandlers:
                         f"{seat_winds_names[index]} {player.irl_name} ({player.tenhou_name})"
                     )
                     self.ready.set_player_unready(player.p_id)
-                text = self.tr(
-                    "ru",
+                text = self.tr_for_table(
+                    table,
                     "start_game_announcement",
                     table=game.table.name,
                     players="\n".join(players_text),
                 )
                 await context.bot.send_message(chat_id=self.chat, text=text)
-                await update.callback_query.edit_message_text(text=self.tr("ru", "start_game_done"))
+                await update.callback_query.edit_message_text(
+                    text=self.tr_for_user(
+                        update.effective_user.id if update.effective_user else None,
+                        "start_game_done",
+                    )
+                )
             except Exception:
                 log_command_event(
                     update,
@@ -189,15 +206,15 @@ class TableHandlers:
                     text=msg, reply_markup=self._ready_button_reply_markup
                 )
                 await update.callback_query.message.chat.send_message(
-                    text=self.tr(
-                        "ru",
+                    text=self.tr_for_table(
+                        table,
                         "start_game_missing_players",
                         players=", ".join(missed_players),
                     )
                 )
             else:
                 await update.callback_query.message.chat.send_message(
-                    text=self.tr("ru", "start_game_failed", reason=result)
+                    text=self.tr_for_table(table, "start_game_failed", reason=result)
                 )
         except Exception:
             log_command_event(
@@ -229,26 +246,33 @@ class TableHandlers:
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="chat_has_no_table"
             )
-            await update.effective_message.reply_text(self.tr("ru", "no_table_in_chat"))
+            await update.effective_message.reply_text(
+                self.tr_for_user(
+                    update.effective_user.id if update.effective_user else None,
+                    "no_table_in_chat",
+                )
+            )
             return
 
         if not context.args or len(context.args) != 3:
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="invalid_arguments"
             )
-            await update.effective_message.reply_text(self.tr("ru", "set_time_usage"))
+            await update.effective_message.reply_text(self.tr_for_table(table, "set_time_usage"))
             return
 
         if not table.unfinished_games():
             await update.effective_message.reply_text(
-                self.tr("ru", "set_time_no_games", table=table.name)
+                self.tr_for_table(table, "set_time_no_games", table=table.name)
             )
             log_command_event(
                 update, "set_time", "rejected", logger=logger, reason="no_unstarted_games"
             )
             return
 
-        timezone = self.timezone_for_user(update.effective_user.id)
+        timezone = self.timezone_for_user(
+            update.effective_user.id if update.effective_user else None
+        )
         now = now_in_timezone(timezone)
         try:
             scheduled_time = parse_table_time(
@@ -261,7 +285,7 @@ class TableHandlers:
             table.validate_scheduled_game_count(scheduled_time.games)
         except TableTimeInputError as error:
             await update.effective_message.reply_text(
-                self.tr("ru", f"set_time_{error.reason}", **error.params)
+                self.tr_for_table(table, f"set_time_{error.reason}", **error.params)
             )
             log_command_event(update, "set_time", "rejected", logger=logger, reason=error.reason)
             return
@@ -275,37 +299,53 @@ class TableHandlers:
             reminder_cutoff=cutoff,
         ):
             log_command_event(update, "set_time", "failed", logger=logger, reason="table_not_found")
-            await update.effective_message.reply_text(self.tr("ru", "set_time_save_failed"))
+            await update.effective_message.reply_text(
+                self.tr_for_table(table, "set_time_save_failed")
+            )
             return
         display = "\n".join(
             self.tr(
                 "ru",
                 "timezone_time",
                 timezone=table_timezone,
-                time=(
-                    f"{datetime_from_timestamp(scheduled_time.timestamp, table_timezone).strftime('%d.%m %H:%M')} "
-                    f"({game_amount_string(scheduled_time.games, 'ru', self.translate('ru'))})"
+                time=datetime_from_timestamp(scheduled_time.timestamp, table_timezone).strftime(
+                    "%d.%m %H:%M"
                 ),
             )
             for table_timezone in table.get_timezones(self.timezone)
         )
-        await update.effective_message.reply_text(self.tr("ru", "set_time_success", time=display))
-        calendar_filename = f"Kawa_Table_{table.name}.ics"
-        generate_calendar_event(
-            name=(
-                f"Kawa Table {table.name} "
-                f"({game_amount_string(scheduled_time.games, 'ru', self.translate('ru'))})"
-            ),
-            start_time=datetime.datetime.fromtimestamp(scheduled_time.timestamp, tz=now.tzinfo),
-            length=datetime.timedelta(hours=scheduled_time.games),
-            filename=calendar_filename,
+        languages = self.languages_for_table(table)
+        header = "\n".join(
+            self.tr(
+                lang,
+                "set_time_success",
+                games=game_amount_string(scheduled_time.games, lang, self.translate(lang)),
+            )
+            for lang in languages
         )
-        with Path(calendar_filename).open("rb") as calendar_file:
-            await update.effective_message.reply_document(document=calendar_file)
+        await update.effective_message.reply_text(f"{header}\n{display}")
+        start_time = datetime.datetime.fromtimestamp(scheduled_time.timestamp, tz=now.tzinfo)
+        for lang in languages:
+            calendar_filename = f"Kawa_Table_{table.name}_{lang}.ics"
+            generate_calendar_event(
+                name=self.tr(
+                    lang,
+                    "set_time_calendar_title",
+                    table=table.name,
+                    games=game_amount_string(scheduled_time.games, lang, self.translate(lang)),
+                ),
+                start_time=start_time,
+                length=datetime.timedelta(hours=scheduled_time.games),
+                filename=calendar_filename,
+            )
+            with Path(calendar_filename).open("rb") as calendar_file:
+                await update.effective_message.reply_document(
+                    document=calendar_file, filename=calendar_filename
+                )
         log_command_event(update, "set_time", "succeeded", logger=logger, table_id=table.table_id)
         await update.effective_message.chat.send_poll(
-            question=display,
-            options=[self.tr("ru", "set_time_poll")],
+            question=f"{header}\n{display}",
+            options=["/".join(self.tr(lang, "set_time_poll") for lang in languages)],
             allows_revoting=False,
             is_anonymous=False,
         )
@@ -317,19 +357,26 @@ class TableHandlers:
             log_command_event(
                 update, "remove_time", "rejected", logger=logger, reason="chat_has_no_table"
             )
-            await update.effective_message.reply_text(self.tr("ru", "no_table_in_chat"))
+            await update.effective_message.reply_text(
+                self.tr_for_user(
+                    update.effective_user.id if update.effective_user else None,
+                    "no_table_in_chat",
+                )
+            )
             return
 
         if not self.tables.clear_table_times(table.table_id):
             log_command_event(
                 update, "remove_time", "failed", logger=logger, reason="table_not_found"
             )
-            await update.effective_message.reply_text(self.tr("ru", "remove_time_failed"))
+            await update.effective_message.reply_text(
+                self.tr_for_table(table, "remove_time_failed")
+            )
             return
         log_command_event(
             update, "remove_time", "succeeded", logger=logger, table_id=table.table_id
         )
-        await update.effective_message.reply_text(self.tr("ru", "remove_time_success"))
+        await update.effective_message.reply_text(self.tr_for_table(table, "remove_time_success"))
 
     @command_handler("timetable")
     async def timetable_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -378,7 +425,12 @@ class TableHandlers:
             log_command_event(
                 update, "judge_call", "rejected", logger=logger, reason="chat_has_no_table"
             )
-            await update.effective_message.reply_text(self.tr("ru", "no_table_in_chat"))
+            await update.effective_message.reply_text(
+                self.tr_for_user(
+                    update.effective_user.id if update.effective_user else None,
+                    "no_table_in_chat",
+                )
+            )
             return
 
         player = self.players.get_player(telegram_id=user.id)
@@ -386,13 +438,17 @@ class TableHandlers:
             log_command_event(
                 update, "judge_call", "rejected", logger=logger, reason="not_registered"
             )
-            await update.effective_message.reply_text(self.tr("ru", "not_registered_system"))
+            await update.effective_message.reply_text(
+                self.tr_for_user(user.id, "not_registered_system")
+            )
             return
 
         try:
             link = await context.bot.create_chat_invite_link(chat_id=table.chat_id)
         except Exception:
-            await update.effective_message.reply_text(self.tr("ru", "judge_call_failed_link"))
+            await update.effective_message.reply_text(
+                self.tr_for_user(user.id, "judge_call_failed_link")
+            )
             log_command_event(
                 update,
                 "judge_call",
@@ -417,5 +473,5 @@ class TableHandlers:
             msg.append(admin.dirty_mention() + " ")
         msg = "".join(msg)
         await context.bot.send_message(chat_id=self.admin_chat, text=msg)
-        await update.effective_message.reply_text(self.tr("ru", "judge_call_success"))
+        await update.effective_message.reply_text(self.tr_for_user(user.id, "judge_call_success"))
         log_command_event(update, "judge_call", "succeeded", logger=logger, table_id=table.table_id)

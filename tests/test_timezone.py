@@ -82,6 +82,21 @@ def test_table_get_timezones_uses_player_timezones_and_default() -> None:
     assert table.get_timezones("Europe/Moscow") == ["Europe/Moscow"]
 
 
+def test_languages_for_table_uses_all_player_languages_and_russian_fallback() -> None:
+    handlers = object.__new__(BaseHandlers)
+    table = SimpleNamespace(
+        get_all_players=lambda: [
+            SimpleNamespace(language="en"),
+            SimpleNamespace(language="ru"),
+            SimpleNamespace(language="en"),
+        ]
+    )
+
+    assert handlers.languages_for_table(table) == ["ru", "en"]
+    table.get_all_players = lambda: [SimpleNamespace(language="unknown")]
+    assert handlers.languages_for_table(table) == ["ru"]
+
+
 def test_timetable_uses_viewer_timezone_and_labels_it() -> None:
     timezone = "Asia/Tokyo"
     table = SimpleNamespace(name="T1", get_unfinished_players=lambda: [])
@@ -135,16 +150,43 @@ def test_table_reminder_includes_each_player_timezone(monkeypatch) -> None:
         table=SimpleNamespace(
             chat_id=123,
             get_timezones=lambda _default: ["Asia/Tokyo", "Europe/Moscow"],
+            get_all_players=lambda: [
+                SimpleNamespace(language="ru"),
+                SimpleNamespace(language="en"),
+            ],
         ),
     )
     handlers = SimpleNamespace(
         timezone="Europe/Moscow",
         tables=SimpleNamespace(get_all_relevant_table_times=Mock(return_value=[scheduled])),
         weekday_names=lambda _lang: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        tr=lambda _lang, key, **values: (
+        languages_for_table=lambda _table: ["ru", "en"],
+        tr=lambda lang, key, **values: (
             f"{values['timezone']}: {values['time']}"
             if key == "timezone_time"
-            else f"Reminder:\n{values['time']}"
+            else (
+                f"Напоминание о назначенном времени (через {values['countdown']})"
+                if key == "reminder_message" and lang == "ru"
+                else (
+                    f"Reminder of the scheduled time (in {values['countdown']})"
+                    if key == "reminder_message"
+                    else f"{values['hours']} ч {values['minutes']} мин"
+                    if key == "reminder_countdown_minutes" and lang == "ru"
+                    else (
+                        f"{values['hours']} hours {values['minutes']} minutes"
+                        if key == "reminder_countdown_minutes"
+                        else f"{values['hours']} ч"
+                        if key == "reminder_countdown_hours" and lang == "ru"
+                        else f"{values['hours']} hours"
+                        if key == "reminder_countdown_hours"
+                        else f"{values['minutes']} мин"
+                        if key == "reminder_countdown_minutes_only" and lang == "ru"
+                        else f"{values['minutes']} minutes"
+                        if key == "reminder_countdown_minutes_only"
+                        else str(values.get("minutes", ""))
+                    )
+                )
+            )
         ),
         session_manager=SimpleNamespace(session=SimpleNamespace(commit=Mock())),
     )
@@ -153,13 +195,18 @@ def test_table_reminder_includes_each_player_timezone(monkeypatch) -> None:
         job=SimpleNamespace(data={"handlers": handlers}),
         bot=bot,
     )
-    now = datetime.datetime(2026, 1, 2, 0, 0, tzinfo=datetime.UTC)
+    now = datetime.datetime(2026, 1, 2, 10, 30, 20, tzinfo=datetime.UTC)
     monkeypatch.setattr(jobs, "now_in_timezone", lambda _timezone: now)
 
     asyncio.run(jobs.remind_tables(context))
 
     message = bot.send_message.await_args.kwargs["text"]
-    assert "Asia/Tokyo: Fri 02.01 23:00" in message
-    assert "Europe/Moscow: Fri 02.01 17:00" in message
+    assert "через 3 ч 30 мин" in message
+    assert "in 3 hours 30 minutes" in message
+    assert "Asia/Tokyo: 02.01 23:00" in message
+    assert "Europe/Moscow: 02.01 17:00" in message
+    assert "Fri" not in message
+    assert message.count("Asia/Tokyo") == 1
+    assert message.count("Europe/Moscow") == 1
     assert scheduled.need_reminder == 0
     handlers.session_manager.session.commit.assert_called_once()

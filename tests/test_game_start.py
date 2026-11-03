@@ -4,6 +4,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+from league_telegram_bot.handlers.core import BaseHandlers
 from league_telegram_bot.handlers.tables import TableHandlers
 
 
@@ -13,6 +14,7 @@ def _game_and_update():
             p_id=index,
             tenhou_name=f"tenhou{index}",
             irl_name=f"Player {index}",
+            language="ru" if index % 2 == 0 else "en",
         )
         for index in range(4)
     ]
@@ -21,7 +23,11 @@ def _game_and_update():
         table=SimpleNamespace(name="T1"),
         players=lambda: players,
     )
-    table = SimpleNamespace(table_id=4, name="T1")
+    table = SimpleNamespace(
+        table_id=4,
+        name="T1",
+        get_all_players=lambda: players,
+    )
     chat = SimpleNamespace(send_message=AsyncMock())
     query = SimpleNamespace(
         edit_message_text=AsyncMock(),
@@ -40,12 +46,16 @@ def _game_and_update():
         if key == "start_game_done":
             return "Приятной игры!"
         if key == "start_game_announcement":
-            return f"Игра за столом {kwargs['table']} запущена:\n{kwargs['players']}"
+            return f"{_lang}: Игра за столом {kwargs['table']} запущена:\n{kwargs['players']}"
         if key == "start_game_missing_players":
             return f"Игроки не в лобби: {kwargs['players']}, статус готовности обновлён."
         raise AssertionError(f"Unexpected translation key: {key}")
 
     handler.tr = translate
+    handler.language_for_user = lambda _user_id: "ru"
+    handler.tr_for_table = BaseHandlers.tr_for_table.__get__(handler)
+    handler.tr_for_user = BaseHandlers.tr_for_user.__get__(handler)
+    handler.languages_for_table = BaseHandlers.languages_for_table.__get__(handler)
     handler._ready_button_reply_markup = "ready-markup"
     handler.players = Mock()
     handler.ready = Mock()
@@ -69,6 +79,8 @@ def test_game_start_success_updates_game_resets_players_and_notifies_chats() -> 
     ]
     context.bot.send_message.assert_awaited_once()
     assert context.bot.send_message.await_args.kwargs["chat_id"] == -100
+    assert "ru: Игра за столом" in context.bot.send_message.await_args.kwargs["text"]
+    assert "en: Игра за столом" in context.bot.send_message.await_args.kwargs["text"]
     update.callback_query.edit_message_text.assert_awaited_once_with(text="Приятной игры!")
 
 
@@ -93,13 +105,15 @@ def test_game_start_member_not_found_unreadies_missing_players_and_keeps_ready_u
 def test_game_start_failure_notifies_table_without_changing_game_or_ready_state() -> None:
     handler, game, table, _players, update, context, chat = _game_and_update()
     handler.tenhou_client.start_game.return_value = ("LOBBY FULL", [], False)
-    handler.tr = lambda _lang, key, **kwargs: f"start_game_failed: {kwargs['reason']}"
+    handler.tr = lambda lang, key, **kwargs: f"{lang}: start_game_failed: {kwargs['reason']}"
 
     asyncio.run(handler.game_start(game, table, update, context))
 
     handler.games.set_game_status.assert_not_called()
     handler.ready.set_player_unready.assert_not_called()
-    chat.send_message.assert_awaited_once_with(text="start_game_failed: LOBBY FULL")
+    chat.send_message.assert_awaited_once_with(
+        text="ru: start_game_failed: LOBBY FULL\nen: start_game_failed: LOBBY FULL"
+    )
     context.bot.send_message.assert_not_awaited()
     update.callback_query.edit_message_text.assert_not_awaited()
 
