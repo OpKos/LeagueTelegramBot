@@ -48,10 +48,15 @@ class TableHandlers:
     @callback_query_handler(pattern=r"^RB")
     async def ready_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
-        chat = query.message.chat
         data = query.data[2:]
         await query.answer()
         log_command_event(update, "ready_button", "started", logger=logger, action=data)
+        if getattr(query.message, "reply_markup", None) is None:
+            log_command_event(
+                update, "ready_button", "rejected", logger=logger, reason="no_keyboard_markup"
+            )
+            return
+        chat = query.message.chat
         if data == "Cancel":
             table = self.tables.get_table(chat_id=chat.id)
             text = (

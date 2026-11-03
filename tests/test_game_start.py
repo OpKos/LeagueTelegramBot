@@ -118,6 +118,26 @@ def test_game_start_failure_notifies_table_without_changing_game_or_ready_state(
     update.callback_query.edit_message_text.assert_not_awaited()
 
 
+def test_ready_button_ignores_callback_without_keyboard_markup() -> None:
+    handler = object.__new__(TableHandlers)
+    query = SimpleNamespace(
+        data="RBReady",
+        message=SimpleNamespace(reply_markup=None),
+        answer=AsyncMock(),
+        edit_message_text=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=None,
+        effective_chat=None,
+    )
+
+    asyncio.run(handler.ready_button(update, SimpleNamespace()))
+
+    query.answer.assert_awaited_once()
+    query.edit_message_text.assert_not_awaited()
+
+
 def test_table_check_starts_first_ready_game_only() -> None:
     handler, game, _table, _players, update, context, _chat = _game_and_update()
     table = SimpleNamespace(table_id=4)
