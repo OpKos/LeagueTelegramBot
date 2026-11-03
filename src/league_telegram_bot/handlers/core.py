@@ -81,6 +81,19 @@ class BaseHandlers:
     def tr_for_user(self, user_id: int | None, key: str, **kwargs) -> str:
         return self.tr(self.language_for_user(user_id), key, **kwargs)
 
+    def languages_for_table(self, table_obj) -> list[str]:
+        languages = {
+            player.language
+            for player in table_obj.get_all_players()
+            if player.language in ("ru", "en")
+        }
+        return [lang for lang in ("ru", "en") if lang in languages] or ["ru"]
+
+    def tr_for_table(self, table_obj, key: str, **kwargs) -> str:
+        return "\n".join(
+            self.tr(lang, key, **kwargs) for lang in self.languages_for_table(table_obj)
+        )
+
     def weekday_names(self, lang: str) -> list[str]:
         return [
             self.tr(lang, f"weekday_{weekday}")

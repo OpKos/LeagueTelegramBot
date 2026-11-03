@@ -180,12 +180,16 @@
         "en": "Failed to save the time."
     },
     "set_time_success": {
-        "ru": "Время установлено:\n{time}",
-        "en": "Time added:\n{time}"
+        "ru": "Время установлено ({games}).",
+        "en": "Time set ({games})."
     },
     "set_time_poll": {
-        "ru": "Согласен играть в это время",
-        "en": "I can play at this time"
+        "ru": "Согласен играть в это время.",
+        "en": "Agree to play at that time."
+    },
+    "set_time_calendar_title": {
+        "ru": "Кава, стол {table} ({games})",
+        "en": "Kawa Table {table} ({games})"
     },
     "schedule_games": {
         "ru": "{count} игр",
@@ -323,6 +327,10 @@
         "ru": "Не удалось пригласить игрока {player}.",
         "en": "Failed to invite player {player}."
     },
+    "set_chat_title": {
+        "ru": "Кава стол {table}",
+        "en": "Kawa table {table}"
+    },
     "log_usage": {
         "ru": "Использование: /log <ссылка>",
         "en": "Usage: /log <link>"
@@ -359,13 +367,21 @@
         "ru": "Не удалось получить таблицу: {reason}",
         "en": "Failed to retrieve the leaderboard: {reason}"
     },
-    "set_chat_title": {
-        "ru": "Кава стол {table}",
-        "en": "Kawa table {table}"
-    },
     "reminder_message": {
-        "ru": "Напоминание о назначенном времени:\n{time}",
-        "en": "Reminder of the scheduled time:\n{time}"
+        "ru": "Напоминание о назначенном времени (через {countdown})",
+        "en": "Reminder of the scheduled time (in {countdown})"
+    },
+    "reminder_countdown_minutes": {
+        "ru": "{hours} ч {minutes} мин",
+        "en": "{hours} hours {minutes} minutes"
+    },
+    "reminder_countdown_hours": {
+        "ru": "{hours} ч",
+        "en": "{hours} hours"
+    },
+    "reminder_countdown_minutes_only": {
+        "ru": "{minutes} мин",
+        "en": "{minutes} minutes"
     },
     "register_not_private_chat": {
         "ru": "Эта команда доступна только в личных сообщениях с ботом.",
