@@ -138,6 +138,57 @@ def test_ready_button_ignores_callback_without_keyboard_markup() -> None:
     query.edit_message_text.assert_not_awaited()
 
 
+def _ready_button_setup(current_text: str):
+    player = SimpleNamespace(p_id=9)
+    table = SimpleNamespace(table_id=4, unfinished_games=lambda: [object()])
+    query = SimpleNamespace(
+        data="RBReady",
+        message=SimpleNamespace(
+            chat=SimpleNamespace(id=123),
+            reply_markup="ready-markup",
+            text=current_text,
+        ),
+        answer=AsyncMock(),
+        edit_message_text=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=7, username="tester", full_name="Test User"),
+        effective_chat=None,
+    )
+    context = SimpleNamespace()
+    handler = object.__new__(TableHandlers)
+    handler.players = Mock()
+    handler.players.get_player.return_value = player
+    handler.tables = Mock()
+    handler.tables.get_table.return_value = table
+    handler.ready = Mock()
+    handler.games = Mock()
+    handler.games.get_table_ready_string.return_value = "updated ready status"
+    handler._ready_button_reply_markup = "ready-markup"
+    handler.table_check_and_start_game = AsyncMock()
+    return handler, query, update, context, table, player
+
+
+def test_ready_button_skips_edit_when_ready_text_is_unchanged() -> None:
+    handler, query, update, context, table, _player = _ready_button_setup("updated ready status")
+
+    asyncio.run(handler.ready_button(update, context))
+
+    query.edit_message_text.assert_not_awaited()
+    handler.table_check_and_start_game.assert_awaited_once_with(table, update, context)
+
+
+def test_ready_button_edits_when_ready_text_changes() -> None:
+    handler, query, update, context, _table, _player = _ready_button_setup("old ready status")
+
+    asyncio.run(handler.ready_button(update, context))
+
+    query.edit_message_text.assert_awaited_once_with(
+        text="updated ready status", reply_markup="ready-markup"
+    )
+
+
 def test_table_check_starts_first_ready_game_only() -> None:
     handler, game, _table, _players, update, context, _chat = _game_and_update()
     table = SimpleNamespace(table_id=4)

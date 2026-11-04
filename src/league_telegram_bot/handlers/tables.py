@@ -103,7 +103,8 @@ class TableHandlers:
             )
             return
         msg = self.games.get_table_ready_string(table_id=table.table_id)
-        await query.edit_message_text(text=msg, reply_markup=self._ready_button_reply_markup)
+        if query.message.text != msg:
+            await query.edit_message_text(text=msg, reply_markup=self._ready_button_reply_markup)
         log_command_event(
             update,
             "ready_button",
