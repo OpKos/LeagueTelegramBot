@@ -193,30 +193,34 @@ class TableHandlers:
 
         try:
             if result == "MEMBER NOT FOUND":
+                missed_player_names = []
                 for nick in missed_players:
                     player = self.players.get_player(tenhou_name=nick)
                     if player is None:
                         log_command_event(
                             update,
                             "game_start",
-                            "failed",
+                            "rejected",
                             logger=logger,
                             game_id=game.game_id,
                             reason="missed_player_not_found",
                             tenhou_name=nick,
                         )
-                        continue
-                    self.ready.set_player_unready(player.p_id)
+                        missed_player_names.append(nick)
+                    else:
+                        missed_player_names.append(
+                            f"{nick} ({player.irl_name})" if player.irl_name else nick
+                        )
                 msg = self.games.get_table_ready_string(table_id=table.table_id)
                 await update.callback_query.edit_message_text(
                     text=msg, reply_markup=self._ready_button_reply_markup
                 )
+                missing_players_header = "/".join(
+                    self.tr(lang, "start_game_missing_players")
+                    for lang in self.languages_for_table(table)
+                )
                 await update.callback_query.message.chat.send_message(
-                    text=self.tr_for_table(
-                        table,
-                        "start_game_missing_players",
-                        players=", ".join(missed_players),
-                    )
+                    text=f"{missing_players_header}:\n" + "\n".join(missed_player_names)
                 )
             else:
                 await update.callback_query.message.chat.send_message(

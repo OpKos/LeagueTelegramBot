@@ -48,7 +48,10 @@ def _game_and_update():
         if key == "start_game_announcement":
             return f"{_lang}: Игра за столом {kwargs['table']} запущена:\n{kwargs['players']}"
         if key == "start_game_missing_players":
-            return f"Игроки не в лобби: {kwargs['players']}, статус готовности обновлён."
+            return {
+                "ru": "Игроки не в лобби",
+                "en": "Players not in the lobby",
+            }[_lang]
         raise AssertionError(f"Unexpected translation key: {key}")
 
     handler.tr = translate
@@ -84,21 +87,26 @@ def test_game_start_success_updates_game_resets_players_and_notifies_chats() -> 
     update.callback_query.edit_message_text.assert_awaited_once_with(text="Приятной игры!")
 
 
-def test_game_start_member_not_found_unreadies_missing_players_and_keeps_ready_ui() -> None:
+def test_game_start_member_not_found_keeps_ready_state_and_reports_both_names() -> None:
     handler, game, table, _players, update, context, chat = _game_and_update()
-    missing_player = SimpleNamespace(p_id=3)
-    handler.tenhou_client.start_game.return_value = ("MEMBER NOT FOUND", ["tenhou3"], False)
-    handler.players.get_player.return_value = missing_player
+    missing_player = SimpleNamespace(p_id=3, irl_name="Player 3")
+    handler.tenhou_client.start_game.return_value = (
+        "MEMBER NOT FOUND",
+        ["tenhou3", "tenhou4"],
+        False,
+    )
+    handler.players.get_player.side_effect = [missing_player, None]
     handler.games.get_table_ready_string.return_value = "updated ready status"
 
     asyncio.run(handler.game_start(game, table, update, context))
 
-    handler.ready.set_player_unready.assert_called_once_with(missing_player.p_id)
+    handler.ready.set_player_unready.assert_not_called()
     update.callback_query.edit_message_text.assert_awaited_once_with(
         text="updated ready status", reply_markup="ready-markup"
     )
-    chat.send_message.assert_awaited_once()
-    assert "tenhou3" in chat.send_message.await_args.kwargs["text"]
+    chat.send_message.assert_awaited_once_with(
+        text=("Игроки не в лобби/Players not in the lobby:\ntenhou3 (Player 3)\ntenhou4")
+    )
     context.bot.send_message.assert_not_awaited()
 
 

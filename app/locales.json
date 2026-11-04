@@ -232,8 +232,8 @@
         "en": "Have a good game!"
     },
     "start_game_missing_players": {
-        "ru": "Игроки не в лобби: {players}, статус готовности обновлён.",
-        "en": "Players not in the lobby: {players}. Their ready status was reset."
+        "ru": "Игроки не в лобби",
+        "en": "Players not in the lobby"
     },
     "start_game_failed": {
         "ru": "Не удалось запустить игру: {reason}",
