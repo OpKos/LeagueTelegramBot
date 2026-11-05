@@ -57,6 +57,7 @@ class Table(Base):
 
     def get_timezones(self, default_timezone: str) -> list[str]:
         timezones = {player.timezone or default_timezone for player in self.get_all_players()}
+        timezones.add(default_timezone)
         return sorted(timezones or {default_timezone})
 
     def get_unfinished_players(self):

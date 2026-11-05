@@ -5,12 +5,14 @@ import logging
 import os
 
 from telegram import InputMediaPhoto
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from ..integrations.pantheon import PantheonClient
 from ..leaderboard import get_leaderboard_image
 from ..time_utils import now_in_timezone, time_in_timezone, timestring_from_timestamp
 from .timetable_image import create_timetable_image
+from .utils import table_timezones_in_display_order
 
 logger = logging.getLogger()
 
@@ -99,8 +101,9 @@ async def remind_tables(context: ContextTypes.DEFAULT_TYPE) -> None:
             continue
         minutes_remaining = max(0, int(round((time.time - now.timestamp()) / 60)))
         hours, minutes = divmod(minutes_remaining, 60)
-        timezone_display = "\n".join(
-            handlers.tr(
+        timezone_lines = []
+        for timezone in table_timezones_in_display_order(time.table, time.time, handlers.timezone):
+            display_line = handlers.tr(
                 "ru",
                 "timezone_time",
                 timezone=timezone,
@@ -111,8 +114,10 @@ async def remind_tables(context: ContextTypes.DEFAULT_TYPE) -> None:
                     timezone=timezone,
                 ),
             )
-            for timezone in time.table.get_timezones(handlers.timezone)
-        )
+            if timezone == handlers.timezone:
+                display_line = f"<b>{display_line}</b>"
+            timezone_lines.append(display_line)
+        timezone_display = "\n".join(timezone_lines)
         headers = "\n".join(
             handlers.tr(
                 lang,
@@ -134,7 +139,9 @@ async def remind_tables(context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         message = f"{headers}\n{timezone_display}"
         try:
-            await context.bot.send_message(chat_id=time.table.chat_id, text=message)
+            await context.bot.send_message(
+                chat_id=time.table.chat_id, text=message, parse_mode=ParseMode.HTML
+            )
             time.need_reminder = 0
         except Exception as e:
             logger.info(e)

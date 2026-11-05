@@ -121,7 +121,7 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
         unfinished_games=lambda: [object(), object(), object()],
         get_unfinished_players=lambda: [player],
         get_all_players=lambda: [player, second_player],
-        get_timezones=lambda _default: ["Asia/Tokyo", "Europe/Moscow"],
+        get_timezones=lambda _default: ["Asia/Tokyo", "Europe/Moscow", "UTC"],
         validate_scheduled_game_count=Mock(),
     )
     scheduled_times = Mock()
@@ -198,9 +198,11 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
     assert confirmation == (
         "Время установлено (1 ханчан).\n"
         "Time set (1 game).\n"
-        "Asia/Tokyo: 02.01 23:00\n"
-        "Europe/Moscow: 02.01 17:00"
+        "<b>UTC: 02.01 14:00</b>\n"
+        "Europe/Moscow: 02.01 17:00\n"
+        "Asia/Tokyo: 02.01 23:00"
     )
+    assert message.reply_text.await_args.kwargs["parse_mode"] == "HTML"
     assert message.reply_document.await_count == 2
     filenames = [call.kwargs["filename"] for call in message.reply_document.await_args_list]
     assert filenames == ["Kawa_Table_T1_ru.ics", "Kawa_Table_T1_en.ics"]
@@ -210,6 +212,8 @@ def test_set_time_command_appends_one_time_without_clearing_existing_times(
     assert "SUMMARY:Kawa Table T1 (1 game)" in english_calendar
     chat.send_poll.assert_awaited_once()
     poll_question = chat.send_poll.await_args.kwargs["question"]
+    assert "<b>UTC: 02.01 14:00</b>" in poll_question
+    assert chat.send_poll.await_args.kwargs["question_parse_mode"] == "HTML"
     assert "Asia/Tokyo: 02.01 23:00" in poll_question
     assert "Europe/Moscow: 02.01 17:00" in poll_question
     assert chat.send_poll.await_args.kwargs["options"] == [

@@ -188,8 +188,8 @@
         "en": "Agree to play at that time."
     },
     "set_time_calendar_title": {
-        "ru": "Кава, стол {table} ({games})",
-        "en": "Kawa Table {table} ({games})"
+        "ru": "Кава-лига, стол {table} ({games})",
+        "en": "Kawa-League Table {table} ({games})"
     },
     "schedule_games": {
         "ru": "{count} игр",
@@ -328,8 +328,8 @@
         "en": "Failed to invite player {player}."
     },
     "set_chat_title": {
-        "ru": "Кава стол {table}",
-        "en": "Kawa table {table}"
+        "ru": "Кава-лига стол {table}",
+        "en": "Kawa-League table {table}"
     },
     "log_usage": {
         "ru": "Использование: /log <ссылка>",

@@ -16,7 +16,13 @@ from ..time_utils import (
     parse_table_time,
 )
 from .decorators import callback_query_handler, command_handler
-from .utils import game_amount_string, generate_calendar_event, log_command_event, table_time_string
+from .utils import (
+    game_amount_string,
+    generate_calendar_event,
+    log_command_event,
+    table_time_string,
+    table_timezones_in_display_order,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -313,8 +319,11 @@ class TableHandlers:
                 self.tr_for_table(table, "set_time_save_failed")
             )
             return
-        display = "\n".join(
-            self.tr(
+        timezone_lines = []
+        for table_timezone in table_timezones_in_display_order(
+            table, scheduled_time.timestamp, self.timezone
+        ):
+            display_line = self.tr(
                 "ru",
                 "timezone_time",
                 timezone=table_timezone,
@@ -322,8 +331,10 @@ class TableHandlers:
                     "%d.%m %H:%M"
                 ),
             )
-            for table_timezone in table.get_timezones(self.timezone)
-        )
+            if table_timezone == self.timezone:
+                display_line = f"<b>{display_line}</b>"
+            timezone_lines.append(display_line)
+        display = "\n".join(timezone_lines)
         languages = self.languages_for_table(table)
         header = "\n".join(
             self.tr(
@@ -333,7 +344,7 @@ class TableHandlers:
             )
             for lang in languages
         )
-        await update.effective_message.reply_text(f"{header}\n{display}")
+        await update.effective_message.reply_text(f"{header}\n{display}", parse_mode=ParseMode.HTML)
         start_time = datetime.datetime.fromtimestamp(scheduled_time.timestamp, tz=now.tzinfo)
         for lang in languages:
             calendar_filename = f"Kawa_Table_{table.name}_{lang}.ics"
@@ -358,6 +369,7 @@ class TableHandlers:
             options=["/".join(self.tr(lang, "set_time_poll") for lang in languages)],
             allows_revoting=False,
             is_anonymous=False,
+            question_parse_mode=ParseMode.HTML,
         )
 
     @command_handler("remove_time")

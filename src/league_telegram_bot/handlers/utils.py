@@ -9,10 +9,10 @@ from uuid import uuid4
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 
-from ..time_utils import timestring_from_timestamp
+from ..time_utils import datetime_from_timestamp, timestring_from_timestamp
 
 if TYPE_CHECKING:
-    from ..models import TableTime
+    from ..models import Table, TableTime
 
 _COMMAND_EVENT_LEVELS = {
     "started": logging.INFO,
@@ -86,6 +86,16 @@ def table_time_string(
         table=table.name,
         games=amount,
         players=",\n".join(player_list),
+    )
+
+
+def table_timezones_in_display_order(
+    table: Table, timestamp: int, default_timezone: str
+) -> list[str]:
+    timezones = table.get_timezones(default_timezone)
+    return sorted(
+        timezones,
+        key=lambda timezone: datetime_from_timestamp(timestamp, timezone).replace(tzinfo=None),
     )
 
 

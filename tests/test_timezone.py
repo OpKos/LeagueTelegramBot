@@ -12,6 +12,7 @@ from league_telegram_bot.handlers import jobs, registration
 from league_telegram_bot.handlers.core import BaseHandlers
 from league_telegram_bot.handlers.registration import RegistrationHandlers
 from league_telegram_bot.handlers.tables import TableHandlers
+from league_telegram_bot.handlers.utils import table_timezones_in_display_order
 from league_telegram_bot.models import Table
 from league_telegram_bot.time_utils import datetime_to_timestamp
 
@@ -71,7 +72,7 @@ def test_timezone_for_user_falls_back_to_configured_timezone() -> None:
 def test_table_get_timezones_uses_player_timezones_and_default() -> None:
     table = Table()
     table.get_all_players = lambda: [
-        SimpleNamespace(timezone=None),
+        SimpleNamespace(timezone="Asia/Tokyo"),
         SimpleNamespace(timezone="Asia/Tokyo"),
         SimpleNamespace(timezone="Asia/Tokyo"),
     ]
@@ -80,6 +81,23 @@ def test_table_get_timezones_uses_player_timezones_and_default() -> None:
 
     table.get_all_players = lambda: []
     assert table.get_timezones("Europe/Moscow") == ["Europe/Moscow"]
+
+
+def test_table_timezones_are_sorted_by_displayed_local_datetime() -> None:
+    table = SimpleNamespace(
+        get_timezones=lambda _default: [
+            "Asia/Tokyo",
+            "UTC",
+            "America/Los_Angeles",
+        ]
+    )
+    timestamp = datetime_to_timestamp(datetime.datetime(2026, 1, 1, 23, 30), "UTC")
+
+    assert table_timezones_in_display_order(table, timestamp, "UTC") == [
+        "America/Los_Angeles",
+        "UTC",
+        "Asia/Tokyo",
+    ]
 
 
 def test_languages_for_table_uses_all_player_languages_and_russian_fallback() -> None:
@@ -203,10 +221,12 @@ def test_table_reminder_includes_each_player_timezone(monkeypatch) -> None:
     message = bot.send_message.await_args.kwargs["text"]
     assert "через 3 ч 30 мин" in message
     assert "in 3 hours 30 minutes" in message
+    assert "<b>Europe/Moscow: 02.01 17:00</b>" in message
     assert "Asia/Tokyo: 02.01 23:00" in message
-    assert "Europe/Moscow: 02.01 17:00" in message
+    assert message.index("Europe/Moscow: 02.01 17:00") < message.index("Asia/Tokyo: 02.01 23:00")
     assert "Fri" not in message
     assert message.count("Asia/Tokyo") == 1
     assert message.count("Europe/Moscow") == 1
+    assert bot.send_message.await_args.kwargs["parse_mode"] == "HTML"
     assert scheduled.need_reminder == 0
     handlers.session_manager.session.commit.assert_called_once()
