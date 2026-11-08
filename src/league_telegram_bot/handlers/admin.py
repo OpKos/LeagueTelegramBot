@@ -351,9 +351,45 @@ class AdminHandlers:
             )
             return
 
-        event_id = int(context.args[0])
-        cutoff = int(context.args[1]) - 1
-        amount = int(context.args[2])
+        if not context.args or len(context.args) != 5:
+            await update.effective_message.reply_text(
+                "Использование: /add_table <event_id> <cutoff> <amount> <table_name> <games>"
+            )
+            log_command_event(
+                update, "add_table", "rejected", logger=logger, reason="invalid_arguments"
+            )
+            return
+
+        try:
+            event_id = int(context.args[0])
+            cutoff = int(context.args[1]) - 1
+            amount = int(context.args[2])
+            games_amount = int(context.args[4])
+        except ValueError:
+            await update.effective_message.reply_text(
+                "Использование: /add_table <event_id> <cutoff> <amount> <table_name> <games>"
+            )
+            log_command_event(
+                update, "add_table", "rejected", logger=logger, reason="invalid_arguments"
+            )
+            return
+
+        if (amount, games_amount) not in ((4, 4), (6, 6), (4, 8)):
+            await update.effective_message.reply_text(
+                "Допустимые сочетания: 4 игрока / 4 игры, 6 игроков / 6 игр, 4 игрока / 8 игр."
+            )
+            log_command_event(
+                update,
+                "add_table",
+                "rejected",
+                logger=logger,
+                reason="unsupported_seating_combination",
+                player_count=amount,
+                games_amount=games_amount,
+            )
+            return
+
+        table_name = context.args[3]
         table_name = context.args[3]
 
         event = self.events.get_event(event_id)
@@ -376,6 +412,7 @@ class AdminHandlers:
             players=players,
             event=event,
             table_name=table_name,
+            games_amount=games_amount,
         )
         await update.effective_message.reply_text("Успешно")
         log_command_event(

@@ -21,6 +21,22 @@ SIX_SEAT_ORDERS = [
     [3, 5, 2, 4],
     [5, 3, 4, 2],
 ]
+EIGHT_GAME_SEAT_ORDERS = [
+    [0, 1, 2, 3],
+    [1, 0, 3, 2],
+    [0, 2, 1, 3],
+    [1, 3, 2, 0],
+    [3, 2, 0, 1],
+    [2, 3, 1, 0],
+    [3, 1, 0, 2],
+    [2, 0, 3, 1],
+]
+
+SEATING_SCHEMAS = {
+    (4, 4): FOUR_SEAT_ORDERS,
+    (6, 6): SIX_SEAT_ORDERS,
+    (4, 8): EIGHT_GAME_SEAT_ORDERS,
+}
 
 
 # ======================
@@ -250,16 +266,24 @@ def add_table(
     players: list[models.Player],
     event: models.Event,
     table_name: str,
+    games_amount: int,
     deadline_group: int = 0,
 ):
+    schema = SEATING_SCHEMAS.get((len(players), games_amount))
+    if schema is None:
+        raise ValueError(
+            f"Unsupported seating combination: {len(players)} players and {games_amount} games"
+        )
+
+    seating_players = players.copy()
+    if games_amount == 8:
+        random.shuffle(seating_players)
+
     table = tables.create_table(
         event_id=event.event_id,
         table_name=table_name,
         deadline_group=deadline_group,
     )
-    schema = FOUR_SEAT_ORDERS
-    if len(players) == 6:
-        schema = SIX_SEAT_ORDERS
     for order in schema:
-        game_order = [players[i] for i in order]
+        game_order = [seating_players[i] for i in order]
         games.create_game_with_players(table_id=table.table_id, players=game_order)
