@@ -58,12 +58,14 @@ class PantheonHandlers:
                     link=f"https://rating.riichimahjong.org/event/{event.pantheon_id}/game/{session_hash}",
                 )
             )
-            log_command_event(update, "log", "succeeded", logger=logger, event_id=event.id)
+            log_command_event(update, "log", "succeeded", logger=logger, event_id=event.event_id)
             return
 
         error = result.get("meta", "неизвестная ошибка").get("cause", "неизвестная ошибка")
         await update.effective_message.reply_text(self.tr(lang, "log_failed", reason=error))
-        log_command_event(update, "log", "failed", logger=logger, event_id=event.id, reason=error)
+        log_command_event(
+            update, "log", "failed", logger=logger, event_id=event.event_id, reason=error
+        )
 
     @command_handler("fill_pantheon_ids")
     async def find_ids_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -143,12 +145,14 @@ class PantheonHandlers:
                 event=event, pantheon_data=result.get("players"), timezone=self.timezone
             )
             await update.effective_message.chat.send_photo(photo=image_link)
-            log_command_event(update, "leaderboard", "succeeded", logger=logger, event_id=event.id)
+            log_command_event(
+                update, "leaderboard", "succeeded", logger=logger, event_id=event.event_id
+            )
             return
         error = result.get("error", "неизвестная ошибка")
         await update.effective_message.reply_text(self.tr(lang, "leaderboard_failed", reason=error))
         log_command_event(
-            update, "leaderboard", "failed", logger=logger, event_id=event.id, reason=error
+            update, "leaderboard", "failed", logger=logger, event_id=event.event_id, reason=error
         )
 
 
