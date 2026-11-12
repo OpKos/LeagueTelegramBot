@@ -60,7 +60,9 @@ async def send_daily_chat_message(context: ContextTypes.DEFAULT_TYPE) -> None:
         right_cutoff=cutoff, left_cutoff=int(now.timestamp())
     )
     if timetable:
-        tt_image = create_timetable_image(timetable, "timetable.png", handlers.timezone)
+        tt_image = create_timetable_image(
+            timetable, "timetable.png", handlers.timezone, handlers.translate("ru")
+        )
         image_links.append(tt_image)
 
     for event in events:

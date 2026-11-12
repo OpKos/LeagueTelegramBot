@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from matplotlib import font_manager
 from PIL import Image, ImageDraw, ImageFont
 
@@ -6,7 +8,12 @@ from ..time_utils import timestring_from_timestamp
 from .utils import game_amount_string
 
 
-def create_timetable_image(table_times: list[TableTime], filename: str, timezone: str):
+def create_timetable_image(
+    table_times: list[TableTime],
+    filename: str,
+    timezone: str,
+    translate: Callable[..., str],
+):
     name_font_file = font_manager.findfont("Jost", fallback_to_default=False)
     name_font = ImageFont.truetype(font=name_font_file, size=25)
     table_font_file = font_manager.findfont("Jost", fallback_to_default=False)
@@ -34,7 +41,7 @@ def create_timetable_image(table_times: list[TableTime], filename: str, timezone
         time_str = (
             timestring_from_timestamp(table_time.time, day=True, timezone=timezone)
             + "\n"
-            + game_amount_string(table_time.games)
+            + game_amount_string(table_time.games, "ru", translate)
         )
         d.text(
             anchor="mm",
