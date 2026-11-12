@@ -162,15 +162,15 @@ class TableHandlers:
                         f"{seat_winds_names[index]} {player.irl_name} ({player.tenhou_name})"
                     )
                     self.ready.set_player_unready(player.p_id)
-                text = self.tr_for_table(
-                    table,
+                text = self.tr(
+                    "ru",
                     "start_game_announcement",
                     table=game.table.name,
                     players="\n".join(players_text),
                 )
                 await context.bot.send_message(chat_id=self.chat, text=text)
                 await update.callback_query.edit_message_text(
-                    text=self.tr_for_user(
+                    text=self.tr_for_table(
                         update.effective_user.id if update.effective_user else None,
                         "start_game_done",
                     )
