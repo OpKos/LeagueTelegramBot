@@ -44,7 +44,10 @@ def _game_and_update():
 
     def translate(_lang, key, **kwargs):
         if key == "start_game_done":
-            return "Приятной игры!"
+            return {
+                "ru": "Приятной игры!",
+                "en": "Have a good game!",
+            }[_lang]
         if key == "start_game_announcement":
             return f"{_lang}: Игра за столом {kwargs['table']} запущена:\n{kwargs['players']}"
         if key == "start_game_missing_players":
@@ -83,8 +86,10 @@ def test_game_start_success_updates_game_resets_players_and_notifies_chats() -> 
     context.bot.send_message.assert_awaited_once()
     assert context.bot.send_message.await_args.kwargs["chat_id"] == -100
     assert "ru: Игра за столом" in context.bot.send_message.await_args.kwargs["text"]
-    assert "en: Игра за столом" in context.bot.send_message.await_args.kwargs["text"]
-    update.callback_query.edit_message_text.assert_awaited_once_with(text="Приятной игры!")
+    assert handler.languages_for_table(table) == ["ru", "en"]
+    update.callback_query.edit_message_text.assert_awaited_once_with(
+        text="Приятной игры!\nHave a good game!"
+    )
 
 
 def test_game_start_member_not_found_keeps_ready_state_and_reports_both_names() -> None:
