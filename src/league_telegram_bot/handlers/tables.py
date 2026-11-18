@@ -171,7 +171,7 @@ class TableHandlers:
                 await context.bot.send_message(chat_id=self.chat, text=text)
                 await update.callback_query.edit_message_text(
                     text=self.tr_for_table(
-                        update.effective_user.id if update.effective_user else None,
+                        table,
                         "start_game_done",
                     )
                 )
